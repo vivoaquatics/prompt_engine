@@ -10,7 +10,7 @@ module PromptEngine
       if @settings.update(settings_params)
         redirect_to edit_settings_path, notice: "Settings have been updated successfully."
       else
-        render :edit, status: :unprocessable_entity
+        render :edit, status: :unprocessable_content
       end
     end
 

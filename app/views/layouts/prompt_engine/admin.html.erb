@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>PromptEngine Admin</title>
+    <title><%= admin_page_title %></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
-    <%= stylesheet_link_tag "prompt_engine/application", "data-turbo-track": "reload" %>
+    <%= prompt_engine_stylesheet_tags "data-turbo-track": "reload" %>
   </head>
 
   <body class="prompt-engine-admin">
