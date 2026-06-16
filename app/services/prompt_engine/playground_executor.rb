@@ -1,17 +1,27 @@
 module PromptEngine
   class PlaygroundExecutor
-    attr_reader :prompt, :provider, :api_key, :parameters
+    attr_reader :prompt, :api_key, :parameters, :model
 
-    MODELS = {
-      "anthropic" => "claude-3-7",
-      "openai" => "gpt-4o"
-    }.freeze
-
-    def initialize(prompt:, provider:, api_key:, parameters: {})
+    def initialize(prompt:, api_key:, parameters: {}, model: nil)
       @prompt = prompt
-      @provider = provider
       @api_key = api_key
       @parameters = parameters || {}
+      @model = model.presence
+    end
+
+    # The model that will actually be used for this run: the override if one
+    # was supplied, otherwise the prompt's saved model. The saved prompt is
+    # never modified.
+    def selected_model
+      model || prompt.model
+    end
+
+    # The provider is inferred from the selected model id (using the
+    # end-user-configurable PromptEngine.configuration.model_provider_patterns),
+    # so callers only need to choose a model. Returns nil for unmappable models.
+    def provider
+      @provider ||= PromptEngine.configuration.model_provider_patterns
+        .find { |_name, pattern| selected_model.to_s.match?(pattern) }&.first
     end
 
     def execute
@@ -26,8 +36,8 @@ module PromptEngine
       # Configure RubyLLM with the appropriate API key
       configure_ruby_llm
 
-      # Create chat instance with the model
-      chat = RubyLLM.chat(model: MODELS[provider])
+      # Create chat instance with the selected model (override or provider default)
+      chat = RubyLLM.chat(model: selected_model)
 
       # Apply temperature if specified
       if prompt.temperature.present?
@@ -65,7 +75,7 @@ module PromptEngine
         response: response_content,
         execution_time: execution_time,
         token_count: token_count,
-        model: MODELS[provider],
+        model: selected_model,
         provider: provider
       }
     rescue => e
@@ -75,9 +85,9 @@ module PromptEngine
     private
 
     def validate_inputs!
-      raise ArgumentError, "Provider is required" if provider.blank?
+      raise ArgumentError, "Model is required" if selected_model.blank?
       raise ArgumentError, "API key is required" if api_key.blank?
-      raise ArgumentError, "Invalid provider" unless MODELS.key?(provider)
+      raise ArgumentError, "Unsupported model: #{selected_model}" if provider.blank?
     end
 
     def configure_ruby_llm

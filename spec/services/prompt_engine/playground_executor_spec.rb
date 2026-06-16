@@ -5,6 +5,7 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
     FactoryBot.create(:prompt,
       content: "Tell me about {{topic}} in {{style}} style",
       system_message: "You are a helpful assistant",
+      model: "gpt-4o",
       temperature: 0.8,
       max_tokens: 150
     )
@@ -21,21 +22,28 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
     it "initializes with required attributes" do
       executor = described_class.new(
         prompt: prompt,
-        provider: "openai",
         api_key: "test-key",
         parameters: valid_parameters
       )
 
       expect(executor.prompt).to eq(prompt)
-      expect(executor.provider).to eq("openai")
       expect(executor.api_key).to eq("test-key")
       expect(executor.parameters).to eq(valid_parameters)
+    end
+
+    it "infers the provider from the selected model" do
+      executor = described_class.new(
+        prompt: prompt,
+        api_key: "test-key",
+        model: "claude-3-opus"
+      )
+
+      expect(executor.provider).to eq("anthropic")
     end
 
     it "initializes with nil parameters as empty hash" do
       executor = described_class.new(
         prompt: prompt,
-        provider: "openai",
         api_key: "test-key",
         parameters: nil
       )
@@ -48,7 +56,6 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
     let(:executor) do
       described_class.new(
         prompt: prompt,
-        provider: "openai",
         api_key: "test-api-key",
         parameters: valid_parameters
       )
@@ -145,9 +152,9 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
       let(:executor) do
         described_class.new(
           prompt: prompt,
-          provider: "anthropic",
           api_key: "anthropic-key",
-          parameters: valid_parameters
+          parameters: valid_parameters,
+          model: "claude-3-5-sonnet-20241022"
         )
       end
 
@@ -175,30 +182,59 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
         expect(config_set).to be true
       end
 
-      it "uses Claude model" do
+      it "uses the selected model" do
         result = executor.execute
 
-        expect(result[:model]).to eq("claude-3-7")
+        expect(result[:model]).to eq("claude-3-5-sonnet-20241022")
         expect(result[:provider]).to eq("anthropic")
+      end
+
+      it "uses a model override without changing the prompt's saved model" do
+        override_executor = described_class.new(
+          prompt: prompt,
+          api_key: "anthropic-key",
+          parameters: valid_parameters,
+          model: "claude-3-opus-20240229"
+        )
+        allow(override_executor).to receive(:require).with("ruby_llm")
+
+        result = override_executor.execute
+
+        expect(result[:model]).to eq("claude-3-opus-20240229")
+        expect(result[:provider]).to eq("anthropic")
+        expect(prompt.model).to eq("gpt-4o")
+      end
+
+      it "falls back to the prompt's saved model when no override is given" do
+        fallback_executor = described_class.new(
+          prompt: prompt,
+          api_key: "anthropic-key",
+          parameters: valid_parameters
+        )
+        allow(fallback_executor).to receive(:require).with("ruby_llm")
+
+        result = fallback_executor.execute
+
+        expect(result[:model]).to eq("gpt-4o")
+        expect(result[:provider]).to eq("openai")
       end
     end
 
     context "with validation errors" do
-      it "raises error when provider is blank" do
+      it "raises error when no model is selected" do
+        prompt_without_model = FactoryBot.create(:prompt, model: nil)
         executor = described_class.new(
-          prompt: prompt,
-          provider: "",
+          prompt: prompt_without_model,
           api_key: "test-key",
           parameters: valid_parameters
         )
 
-        expect { executor.execute }.to raise_error(ArgumentError, "Provider is required")
+        expect { executor.execute }.to raise_error(ArgumentError, "Model is required")
       end
 
       it "raises error when API key is blank" do
         executor = described_class.new(
           prompt: prompt,
-          provider: "openai",
           api_key: "",
           parameters: valid_parameters
         )
@@ -206,15 +242,15 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
         expect { executor.execute }.to raise_error(ArgumentError, "API key is required")
       end
 
-      it "raises error for invalid provider" do
+      it "raises error for a model that maps to no known provider" do
         executor = described_class.new(
           prompt: prompt,
-          provider: "invalid-provider",
           api_key: "test-key",
-          parameters: valid_parameters
+          parameters: valid_parameters,
+          model: "some-unknown-model"
         )
 
-        expect { executor.execute }.to raise_error(ArgumentError, "Invalid provider")
+        expect { executor.execute }.to raise_error(ArgumentError, "Unsupported model: some-unknown-model")
       end
     end
 
@@ -278,6 +314,7 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
         FactoryBot.create(:prompt,
           content: "Simple prompt",
           system_message: nil,
+          model: "gpt-4o",
           temperature: nil
         )
       end
@@ -285,7 +322,6 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
       let(:executor) do
         described_class.new(
           prompt: minimal_prompt,
-          provider: "openai",
           api_key: "test-key",
           parameters: {}
         )
@@ -313,12 +349,52 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
     end
   end
 
-  describe "MODELS constant" do
-    it "contains supported providers and their models" do
-      expect(described_class::MODELS).to eq({
-        "anthropic" => "claude-3-7",
-        "openai" => "gpt-4o"
-      })
+  describe "#provider" do
+    def provider_for(model)
+      described_class.new(prompt: prompt, api_key: "test-key", model: model).provider
+    end
+
+    it "infers anthropic from Claude model ids" do
+      expect(provider_for("claude-3-opus")).to eq("anthropic")
+    end
+
+    it "infers openai from GPT model ids" do
+      expect(provider_for("gpt-4-turbo-preview")).to eq("openai")
+    end
+
+    it "returns nil for models it cannot map" do
+      expect(provider_for("some-unknown-model")).to be_nil
+    end
+
+    it "honors custom configured patterns" do
+      original = PromptEngine.configuration.model_provider_patterns
+      PromptEngine.configuration.model_provider_patterns =
+        original.merge("openai" => /\A(gpt|my-llm)/i)
+
+      expect(provider_for("my-llm-7b")).to eq("openai")
+    ensure
+      PromptEngine.configuration.model_provider_patterns = original
+    end
+  end
+
+  describe "#selected_model" do
+    it "returns the override when one is provided" do
+      executor = described_class.new(
+        prompt: prompt,
+        api_key: "test-key",
+        model: "gpt-4-turbo-preview"
+      )
+
+      expect(executor.selected_model).to eq("gpt-4-turbo-preview")
+    end
+
+    it "falls back to the prompt's saved model when no override is given" do
+      executor = described_class.new(
+        prompt: prompt,
+        api_key: "test-key"
+      )
+
+      expect(executor.selected_model).to eq(prompt.model)
     end
   end
 end

@@ -13,9 +13,9 @@ module PromptEngine
     def execute
       executor = PlaygroundExecutor.new(
         prompt: @prompt,
-        provider: params[:provider],
         api_key: params[:api_key],
-        parameters: params[:parameters]
+        parameters: params[:parameters],
+        model: params[:model]
       )
 
       begin

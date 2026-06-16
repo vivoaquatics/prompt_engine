@@ -29,10 +29,10 @@ module PromptEngine
           expect(response.body).to include("style")
         end
 
-        it "displays provider selection" do
+        it "displays model selection" do
           get playground_prompt_path(prompt)
-          expect(response.body).to include("anthropic")
-          expect(response.body).to include("openai")
+          expect(response.body).to include("Model")
+          expect(response.body).to include("gpt-4")
         end
       end
 
@@ -59,7 +59,6 @@ module PromptEngine
     describe "POST /prompt_engine/prompts/:id/playground" do
       let(:valid_params) do
         {
-          provider: "anthropic",
           api_key: "test-api-key",
           parameters: {
             topic: "Ruby on Rails",
@@ -104,13 +103,22 @@ module PromptEngine
 
           result = PlaygroundRunResult.last
           expect(result.prompt_version).to eq(prompt.current_version)
-          expect(result.provider).to eq("anthropic")
-          expect(result.model).to eq("claude-3-7")
+          expect(result.provider).to eq("openai")
+          expect(result.model).to eq("gpt-4")
           expect(result.rendered_prompt).to eq("Tell me about Ruby on Rails in technical style")
           expect(result.response).to eq("This is a test response about Ruby on Rails")
           expect(result.execution_time).to be >= 0
           expect(result.token_count).to eq(150)
           expect(result.parameters).to eq({ "topic" => "Ruby on Rails", "style" => "technical" })
+        end
+
+        it "uses the model override without changing the saved prompt" do
+          expect {
+            post playground_prompt_path(prompt), params: valid_params.merge(model: "claude-3-opus-20240229")
+          }.not_to change { prompt.reload.model }
+
+          result = PlaygroundRunResult.last
+          expect(result.model).to eq("claude-3-opus-20240229")
         end
 
         it "renders the result view" do
@@ -149,11 +157,11 @@ module PromptEngine
         end
       end
 
-      context "with OpenAI provider" do
+      context "with an OpenAI model" do
         let(:openai_params) do
           {
-            provider: "openai",
             api_key: "test-openai-key",
+            model: "gpt-4-turbo-preview",
             parameters: { topic: "Python", style: "casual" }
           }
         end
@@ -167,19 +175,20 @@ module PromptEngine
       end
 
       context "with missing required parameters" do
-        it "handles missing provider" do
-          post playground_prompt_path(prompt), params: {
+        it "handles a prompt with no model selected" do
+          modelless_prompt = create(:prompt, model: nil, content: "Tell me about {{topic}}")
+
+          post playground_prompt_path(modelless_prompt), params: {
             api_key: "test-key",
             parameters: { topic: "Rails" }
           }
 
           expect(response).to be_successful
-          expect(response.body).to include("Provider is required")
+          expect(response.body).to include("Model is required")
         end
 
         it "handles missing API key" do
           post playground_prompt_path(prompt), params: {
-            provider: "anthropic",
             parameters: { topic: "Rails" }
           }
 
@@ -187,15 +196,15 @@ module PromptEngine
           expect(response.body).to include("API key is required")
         end
 
-        it "handles invalid provider" do
+        it "handles a model with no known provider" do
           post playground_prompt_path(prompt), params: {
-            provider: "invalid_provider",
             api_key: "test-key",
+            model: "mystery-model",
             parameters: { topic: "Rails" }
           }
 
           expect(response).to be_successful
-          expect(response.body).to include("Invalid provider")
+          expect(response.body).to include("Unsupported model")
         end
       end
 
@@ -240,7 +249,6 @@ module PromptEngine
       context "with empty parameters" do
         it "handles nil parameters gracefully" do
           post playground_prompt_path(prompt), params: {
-            provider: "anthropic",
             api_key: "test-key",
             parameters: nil
           }
@@ -250,7 +258,6 @@ module PromptEngine
 
         it "handles empty parameters hash" do
           post playground_prompt_path(prompt), params: {
-            provider: "anthropic",
             api_key: "test-key",
             parameters: {}
           }
@@ -264,7 +271,6 @@ module PromptEngine
 
         it "executes successfully without parameters" do
           post playground_prompt_path(simple_prompt), params: {
-            provider: "anthropic",
             api_key: "test-key"
           }
 
