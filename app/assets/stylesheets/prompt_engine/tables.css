@@ -1,7 +1,7 @@
 /* Table Components */
 .table-container {
-  background-color: white;
-  border: 1px solid var(--color-gray-200);
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
@@ -15,7 +15,7 @@
 
 
 .table__row {
-  border-bottom: 1px solid var(--color-gray-100);
+  border-bottom: 1px solid var(--color-border-subtle);
   transition: background-color var(--transition-fast);
 }
 
@@ -24,7 +24,7 @@
 }
 
 .table__row:hover {
-  background-color: var(--color-gray-50);
+  background-color: var(--color-bg-elevated);
 }
 
 /* Table Cells */
@@ -36,7 +36,7 @@
 
 .table__cell--header {
   font-weight: 600;
-  color: var(--color-gray-700);
+  color: var(--color-text-label);
   white-space: nowrap;
 }
 
@@ -66,8 +66,8 @@
 }
 
 .table__badge--draft {
-  background-color: var(--color-gray-100);
-  color: var(--color-gray-700);
+  background-color: var(--color-bg-disabled);
+  color: var(--color-text-label);
 }
 
 .table__badge--active {
@@ -119,14 +119,14 @@
 .table__empty {
   padding: var(--spacing-3xl) var(--spacing-xl);
   text-align: center;
-  color: var(--color-gray-500);
+  color: var(--color-text-muted);
 }
 
 
 .table__empty-title {
   font-size: var(--font-size-lg);
   font-weight: 600;
-  color: var(--color-gray-700);
+  color: var(--color-text-label);
   margin-bottom: var(--spacing-sm);
 }
 
@@ -139,17 +139,17 @@
 .table-empty {
   padding: var(--spacing-xl) var(--spacing-lg);
   text-align: center;
-  color: var(--color-gray-600);
+  color: var(--color-text-secondary);
 }
 
 /* Table text styles */
 .table__primary {
   font-weight: 500;
-  color: var(--color-gray-900);
+  color: var(--color-text-primary);
 }
 
 .table__secondary {
-  color: var(--color-gray-600);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }
 
@@ -194,12 +194,12 @@
 
 .table__metric-value {
   font-weight: 500;
-  color: var(--color-gray-900);
+  color: var(--color-text-primary);
 }
 
 .table__metric-unit {
   font-size: var(--font-size-xs);
-  color: var(--color-gray-600);
+  color: var(--color-text-secondary);
 }
 
 /* Compact table variant */
@@ -216,7 +216,7 @@
 /* Simple table variant (no header) */
 .table--simple tbody tr td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--color-gray-100);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .table--simple tbody tr:first-child td {
@@ -235,15 +235,15 @@
     border-left: none;
     border-right: none;
   }
-  
+
   .table {
     font-size: var(--font-size-xs);
   }
-  
+
   .table__cell {
     padding: var(--spacing-sm);
   }
-  
+
   .table__cell--hide-mobile {
     display: none;
   }

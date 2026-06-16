@@ -27,6 +27,7 @@ module PromptEngine
       evaluations
       utilities
       overrides
+      dark_mode
       components/_test_runs
     ].map { |name| "prompt_engine/#{name}" }.freeze
 

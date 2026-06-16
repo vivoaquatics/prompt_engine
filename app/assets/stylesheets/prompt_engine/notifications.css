@@ -7,8 +7,8 @@
 .admin-notification {
   padding: var(--spacing-md) var(--spacing-lg);
   margin-bottom: var(--spacing-md);
-  background-color: var(--color-gray-50);
-  border: 1px solid var(--color-gray-200);
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
 }

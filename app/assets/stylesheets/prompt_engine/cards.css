@@ -1,7 +1,7 @@
 /* Card Components */
 .card {
-  background-color: white;
-  border: 1px solid var(--color-gray-200);
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -15,8 +15,8 @@
 /* Card Header */
 .card__header {
   padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--color-gray-200);
-  background-color: var(--color-gray-50);
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-bg-elevated);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -25,7 +25,7 @@
 .card__title {
   font-size: var(--font-size-lg);
   font-weight: 600;
-  color: var(--color-gray-900);
+  color: var(--color-text-primary);
   margin: 0;
 }
 
@@ -59,5 +59,5 @@
 }
 
 .card__section + .card__section {
-  border-top: 1px solid var(--color-gray-200);
+  border-top: 1px solid var(--color-border);
 }

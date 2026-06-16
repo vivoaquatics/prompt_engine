@@ -82,6 +82,46 @@
   --transition-fast: 150ms ease-in-out;
   --transition-base: 200ms ease-in-out;
   --transition-slow: 300ms ease-in-out;
+
+  /* Semantic theme tokens — override in dark mode below */
+  --color-bg-page: var(--color-gray-50);
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: var(--color-gray-50);
+  --color-bg-disabled: var(--color-gray-100);
+  --color-text-primary: var(--color-gray-900);
+  --color-text-secondary: var(--color-gray-600);
+  --color-text-label: var(--color-gray-700);
+  --color-text-muted: var(--color-gray-500);
+  --color-border: var(--color-gray-200);
+  --color-border-input: var(--color-gray-300);
+  --color-border-subtle: var(--color-gray-100);
+
+  /* Sidebar tokens — sidebar stays dark in both themes */
+  --color-sidebar-bg: var(--color-gray-900);
+  --color-sidebar-border: var(--color-gray-800);
+  --color-sidebar-text: var(--color-gray-100);
+  --color-sidebar-text-muted: var(--color-gray-300);
+  --color-sidebar-text-dim: var(--color-gray-400);
+  --color-sidebar-hover: var(--color-gray-800);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg-page: #0d1117;
+    --color-bg-surface: var(--color-gray-800);
+    --color-bg-elevated: var(--color-gray-700);
+    --color-bg-disabled: var(--color-gray-700);
+    --color-text-primary: var(--color-gray-50);
+    --color-text-secondary: var(--color-gray-400);
+    --color-text-label: var(--color-gray-300);
+    --color-text-muted: var(--color-gray-500);
+    --color-border: var(--color-gray-700);
+    --color-border-input: var(--color-gray-600);
+    --color-border-subtle: var(--color-gray-700);
+
+    --color-sidebar-bg: #161b22;
+    --color-sidebar-border: var(--color-gray-700);
+  }
 }
 
 /* CSS Reset / Normalize */
@@ -95,8 +135,8 @@
   font-family: var(--font-family-base);
   font-size: var(--font-size-base);
   line-height: var(--line-height-normal);
-  color: var(--color-gray-900);
-  background-color: var(--color-gray-50);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -153,7 +193,7 @@
   font-size: var(--font-size-lg);
 }
 .prompt-engine-admin .text-muted {
-  color: var(--color-gray-600);
+  color: var(--color-text-secondary);
 }
 .prompt-engine-admin .text-danger {
   color: var(--color-danger);

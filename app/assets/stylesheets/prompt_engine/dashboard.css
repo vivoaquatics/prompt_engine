@@ -29,8 +29,8 @@
 
 /* Stat Cards */
 .stat-card {
-  background: var(--color-white);
-  border: 1px solid var(--color-gray-200);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   display: flex;
@@ -40,7 +40,7 @@
 }
 
 .stat-card:hover {
-  border-color: var(--color-gray-300);
+  border-color: var(--color-border-input);
   box-shadow: var(--shadow-sm);
 }
 
@@ -82,14 +82,14 @@
 .stat-card__title {
   font-size: var(--text-sm);
   font-weight: 500;
-  color: var(--color-gray-600);
+  color: var(--color-text-secondary);
   margin: 0 0 var(--spacing-xs) 0;
 }
 
 .stat-card__value {
   font-size: var(--text-2xl);
   font-weight: 600;
-  color: var(--color-gray-900);
+  color: var(--color-text-primary);
   margin: 0;
   line-height: 1.2;
 }
@@ -103,14 +103,14 @@
 
 .test-run-item {
   padding: var(--spacing-md);
-  border: 1px solid var(--color-gray-200);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   transition: var(--transition-all);
 }
 
 .test-run-item:hover {
-  border-color: var(--color-gray-300);
-  background: var(--color-gray-50);
+  border-color: var(--color-border-input);
+  background: var(--color-bg-elevated);
 }
 
 .test-run-item__main {
@@ -179,11 +179,11 @@
 }
 
 .dashboard__section .table__row {
-  border-bottom: 1px solid var(--color-gray-100);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .dashboard__section .table__row:hover {
-  background-color: var(--color-gray-50);
+  background-color: var(--color-bg-elevated);
 }
 
 .dashboard__section .table__cell {
@@ -204,12 +204,12 @@
   font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-gray-500);
+  color: var(--color-text-muted);
 }
 
 .dashboard__section .table__action {
   font-weight: 500;
-  color: var(--color-gray-900);
+  color: var(--color-text-primary);
 }
 
 .dashboard__section .table__action:hover {
@@ -225,8 +225,8 @@
 }
 
 .metrics-card {
-  background: var(--color-white);
-  border: 1px solid var(--color-gray-200);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   display: flex;
@@ -236,7 +236,7 @@
 }
 
 .metrics-card:hover {
-  border-color: var(--color-gray-300);
+  border-color: var(--color-border-input);
   box-shadow: var(--shadow-sm);
   transform: translateY(-2px);
 }
@@ -266,14 +266,14 @@
 .metrics-card__label {
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--color-gray-600);
+  color: var(--color-text-secondary);
   margin: 0 0 var(--spacing-xs) 0;
 }
 
 .metrics-card__value {
   font-size: var(--font-size-2xl);
   font-weight: 700;
-  color: var(--color-gray-900);
+  color: var(--color-text-primary);
   margin: 0;
   line-height: 1.2;
 }
