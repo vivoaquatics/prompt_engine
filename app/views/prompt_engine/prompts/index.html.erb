@@ -13,7 +13,7 @@
           <th class="table__cell table__cell--header table__cell--hide-mobile">Model</th>
           <th class="table__cell table__cell--header table__cell--center">Version</th>
           <th class="table__cell table__cell--header table__cell--center">Status</th>
-          <th class="table__cell table__cell--header table__cell--hide-mobile">Created</th>
+          <th class="table__cell table__cell--header table__cell--hide-mobile">Updated</th>
           <th class="table__cell table__cell--header table__cell--actions">Actions</th>
         </tr>
       </thead>
@@ -46,8 +46,10 @@
                 <%= prompt.status %>
               </span>
             </td>
-            <td class="table__cell table__cell--hide-mobile text-muted">
-              <%= prompt.created_at.strftime("%b %d, %Y") %>
+            <td class="table__cell table__cell--hide-mobile text-muted" style="white-space: nowrap">
+              <time datetime="<%= prompt.updated_at.iso8601 %>" data-local-time>
+                <%= prompt.updated_at.strftime("%b %d, %Y") %>
+              </time>
             </td>
             <td class="table__cell table__cell--actions">
               <div class="btn-group">
@@ -69,6 +71,15 @@
     </div>
   <% end %>
 </div>
+
+<script>
+  document.querySelectorAll('time[data-local-time]').forEach(function(el) {
+    el.textContent = new Date(el.dateTime).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    });
+  });
+</script>
 
 <style>
   .admin-header {
