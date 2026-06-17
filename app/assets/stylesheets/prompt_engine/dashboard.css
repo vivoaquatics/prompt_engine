@@ -213,7 +213,7 @@
 }
 
 .dashboard__section .table__action:hover {
-  color: var(--color-primary-600);
+  color: var(--color-link);
 }
 
 /* Metrics Dashboard */

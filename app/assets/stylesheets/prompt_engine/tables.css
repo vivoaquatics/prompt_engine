@@ -154,26 +154,26 @@
 }
 
 .table__action {
-  color: var(--color-primary-600);
+  color: var(--color-link);
   text-decoration: none;
   font-weight: 500;
   transition: color var(--transition-fast);
 }
 
 .table__action:hover {
-  color: var(--color-primary-700);
+  color: var(--color-link-hover);
   text-decoration: underline;
 }
 
 .table__link {
-  color: var(--color-primary-600);
+  color: var(--color-link);
   text-decoration: none;
   font-weight: 500;
   transition: color var(--transition-fast);
 }
 
 .table__link:hover {
-  color: var(--color-primary-700);
+  color: var(--color-link-hover);
   text-decoration: underline;
 }
 

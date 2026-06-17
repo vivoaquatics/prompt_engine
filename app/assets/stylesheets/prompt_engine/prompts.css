@@ -95,7 +95,7 @@
 
 .parameter-type {
   font-family: monospace;
-  color: var(--color-primary-600);
+  color: var(--color-link);
 }
 
 .parameter-required {
