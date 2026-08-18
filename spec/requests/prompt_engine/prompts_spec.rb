@@ -95,7 +95,7 @@ module PromptEngine
 
         it "returns unprocessable entity status" do
           post prompt_engine.prompts_path, params: { prompt: invalid_attributes }
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
         end
 
         it "renders the new template with errors" do
@@ -162,7 +162,7 @@ module PromptEngine
 
         it "returns unprocessable entity status" do
           patch prompt_engine.prompt_path(prompt), params: { prompt: invalid_attributes }
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
         end
 
         it "renders the edit template with errors" do
@@ -214,7 +214,7 @@ module PromptEngine
 
         it "returns unprocessable entity status" do
           put prompt_engine.prompt_path(prompt), params: { prompt: invalid_attributes }
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
         end
 
         it "renders the edit template with errors" do

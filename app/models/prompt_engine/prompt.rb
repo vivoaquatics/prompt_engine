@@ -33,7 +33,7 @@ module PromptEngine
     after_create :create_initial_version
     after_create :sync_parameters!
     after_update :create_version_if_changed
-    after_update :sync_parameters!, if: :saved_change_to_content?
+    after_update :sync_parameters!, if: :saved_change_to_template?
     before_save :clean_orphaned_parameters
 
     VERSIONED_ATTRIBUTES = %w[content system_message model temperature max_tokens metadata].freeze
@@ -59,6 +59,12 @@ module PromptEngine
     def versioned_attributes_changed?
       # This method is for checking if versioned attributes have changed before save
       (changed & VERSIONED_ATTRIBUTES).any?
+    end
+
+    # Variables can appear in either the content or the system_message, so
+    # parameter syncing must react to changes in both.
+    def saved_change_to_template?
+      saved_change_to_content? || saved_change_to_system_message?
     end
 
     # Parameter management methods
@@ -235,7 +241,7 @@ module PromptEngine
     end
 
     def clean_orphaned_parameters
-      return unless content_changed?
+      return unless content_changed? || system_message_changed?
 
       # Mark parameters for destruction if their names are not in the content
       detected_vars = detect_variables

@@ -35,7 +35,7 @@ module PromptEngine
       if @prompt.save
         redirect_to prompt_path(@prompt), notice: "Prompt was successfully created."
       else
-        render :new, status: :unprocessable_entity
+        render :new, status: :unprocessable_content
       end
     end
 
@@ -46,7 +46,7 @@ module PromptEngine
       if @prompt.update(prompt_params)
         redirect_to prompt_path(@prompt), notice: "Prompt was successfully updated."
       else
-        render :edit, status: :unprocessable_entity
+        render :edit, status: :unprocessable_content
       end
     end
 

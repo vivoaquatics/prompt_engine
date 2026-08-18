@@ -17,7 +17,7 @@
   display: block;
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--color-gray-700);
+  color: var(--color-text-label);
   margin-bottom: var(--spacing-xs);
 }
 
@@ -41,9 +41,9 @@
   font-family: inherit;
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
-  color: var(--color-gray-900);
-  background-color: white;
-  border: 1px solid var(--color-gray-300);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border-input);
   border-radius: var(--radius-md);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
   -webkit-appearance: none;
@@ -61,7 +61,7 @@
 
 .form__input::placeholder,
 .form__textarea::placeholder {
-  color: var(--color-gray-400);
+  color: var(--color-text-muted);
 }
 
 /* Textarea Specific */
@@ -82,7 +82,7 @@
 /* Form Help Text */
 .form__help {
   font-size: var(--font-size-sm);
-  color: var(--color-gray-600);
+  color: var(--color-text-secondary);
   margin-top: var(--spacing-xs);
 }
 
@@ -125,7 +125,7 @@
 .form__input:not(:focus):invalid,
 .form__textarea:not(:focus):invalid,
 .form__select:not(:focus):invalid {
-  border-color: var(--color-gray-300);
+  border-color: var(--color-border-input);
 }
 
 /* Form Actions */
@@ -134,7 +134,7 @@
   gap: var(--spacing-md);
   margin-top: var(--spacing-xl);
   padding-top: var(--spacing-lg);
-  border-top: 1px solid var(--color-gray-200);
+  border-top: 1px solid var(--color-border);
 }
 
 .form__actions--right {
@@ -158,8 +158,8 @@
 .form__input:disabled,
 .form__textarea:disabled,
 .form__select:disabled {
-  background-color: var(--color-gray-100);
-  color: var(--color-gray-500);
+  background-color: var(--color-bg-disabled);
+  color: var(--color-text-muted);
   cursor: not-allowed;
 }
 
@@ -194,5 +194,5 @@
   font-size: var(--font-size-lg);
   font-weight: 600;
   margin-bottom: var(--spacing-sm);
-  color: var(--color-gray-900);
+  color: var(--color-text-primary);
 }

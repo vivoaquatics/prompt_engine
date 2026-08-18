@@ -5,7 +5,7 @@
   display: inline-block;
   width: 1.5rem;
   height: 1.5rem;
-  border: 0.2rem solid var(--color-gray-200);
+  border: 0.2rem solid var(--color-border);
   border-top-color: var(--color-primary-600);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -47,7 +47,7 @@
 }
 
 .loading-overlay__content {
-  background: white;
+  background: var(--color-bg-surface);
   padding: var(--spacing-xl);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
@@ -62,12 +62,12 @@
 .loading-overlay__title {
   font-size: var(--font-size-lg);
   font-weight: 600;
-  color: var(--color-gray-900);
+  color: var(--color-text-primary);
   margin-bottom: var(--spacing-sm);
 }
 
 .loading-overlay__text {
-  color: var(--color-gray-600);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }
 
@@ -95,8 +95,8 @@
 
 .btn--secondary.btn--loading::after,
 .btn--outline.btn--loading::after {
-  border-color: var(--color-gray-300);
-  border-top-color: var(--color-gray-600);
+  border-color: var(--color-border-input);
+  border-top-color: var(--color-text-secondary);
 }
 
 /* Form Loading State */
@@ -137,7 +137,7 @@
   transform: translate(-50%, -50%);
   width: 2rem;
   height: 2rem;
-  border: 0.2rem solid var(--color-gray-200);
+  border: 0.2rem solid var(--color-border);
   border-top-color: var(--color-primary-600);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -176,7 +176,7 @@
 /* Progress Bar */
 .progress {
   height: 0.5rem;
-  background-color: var(--color-gray-200);
+  background-color: var(--color-border);
   border-radius: var(--radius-full);
   overflow: hidden;
 }

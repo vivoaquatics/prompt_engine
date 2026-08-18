@@ -27,7 +27,7 @@
 
 .btn:focus-visible {
   box-shadow:
-    0 0 0 2px var(--color-gray-50),
+    0 0 0 2px var(--color-bg-page),
     0 0 0 4px var(--color-primary-500);
 }
 
@@ -73,19 +73,19 @@
 
 /* Secondary Button */
 .btn--secondary {
-  background-color: white;
-  color: var(--color-gray-700);
-  border-color: var(--color-gray-300);
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-label);
+  border-color: var(--color-border-input);
 }
 
 .btn--secondary:hover {
-  background-color: var(--color-gray-50);
-  color: var(--color-gray-900);
+  background-color: var(--color-bg-elevated);
+  color: var(--color-text-primary);
   text-decoration: none;
 }
 
 .btn--secondary:active {
-  background-color: var(--color-gray-100);
+  background-color: var(--color-bg-disabled);
 }
 
 /* Danger Button */

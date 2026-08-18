@@ -1,22 +1,13 @@
 /* PromptEngine Admin Styles
- * 
- * Import all component styles in the correct order
+ *
+ * NOTE: The admin stylesheets are intentionally NOT chained together with CSS
+ * `@import` here. Propshaft does not bundle stylesheets, so an @import chain
+ * makes the browser download this file, parse it, and only then serially fetch
+ * each imported file -- a waterfall that causes a flash of unstyled content
+ * (FOUC).
+ *
+ * Instead, each component stylesheet is linked individually (in cascade order)
+ * from the layout via the `prompt_engine_stylesheet_tags` helper. See
+ * PromptEngine::ApplicationHelper::STYLESHEETS. When adding a new stylesheet,
+ * add it to that list rather than importing it here.
  */
-
-@import url("foundation.css");
-@import url("layout.css");
-@import url("sidebar.css");
-@import url("buttons.css");
-@import url("forms.css");
-@import url("tables.css");
-@import url("cards.css");
-@import url("dashboard.css");
-@import url("prompts.css");
-@import url("versions.css");
-@import url("notifications.css");
-@import url("loading.css");
-@import url("comparison.css");
-@import url("evaluations.css");
-@import url("utilities.css");
-@import url("overrides.css");
-@import url("components/_test_runs.css");

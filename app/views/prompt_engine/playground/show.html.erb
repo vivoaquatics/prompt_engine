@@ -11,32 +11,29 @@
   </div>
   <div class="card__body">
     <%= form_with url: playground_prompt_path(@prompt), method: :post, local: true, html: { class: "form" } do |form| %>
+      <%
+        # Infer the provider from the prompt's model so the form can prefill
+        # the right saved API key without a separate provider field. Driven by
+        # the configurable patterns; the JS below mirrors them for live swaps.
+        provider_patterns = PromptEngine.configuration.model_provider_patterns
+        default_provider = provider_patterns
+          .find { |_name, pattern| @prompt.model.to_s.match?(pattern) }&.first
+
+        # Serialize the patterns so the client can run the same inference.
+        provider_patterns_json = provider_patterns.transform_values do |pattern|
+          { source: pattern.source, ignore_case: !(pattern.options & Regexp::IGNORECASE).zero? }
+        end.to_json
+      %>
       <div class="form__group">
-        <%= form.label :provider, "AI Provider", class: "form__label form__label--required" %>
-        <% 
-          # Determine default provider based on prompt's model
-          default_provider = case @prompt.model
-                           when /claude/i, /anthropic/i
-                             "anthropic"
-                           when /gpt/i, /openai/i
-                             "openai"
-                           else
-                             nil
-                           end
-        %>
-        <%= form.select :provider,
-            options_for_select([
-              ["Anthropic (claude-3-5-sonnet-20241022)", "anthropic"],
-              ["OpenAI (gpt-4o)", "openai"]
-            ], default_provider),
-            { prompt: "Select a provider" },
-            class: "form__select", required: true %>
+        <%= form.label :model, "Model", class: "form__label form__label--required" %>
+        <%= form.select :model,
+            options_for_select(PromptEngine.configuration.options_for_model_select, @prompt.model),
+            {},
+            class: "form__select", required: true,
+            data: { provider_patterns: provider_patterns_json } %>
         <div class="form__help">
-          <% if @prompt.model.present? %>
-            Prompt is configured for <%= @prompt.model %>
-          <% else %>
-            Select which AI provider to test with
-          <% end %>
+          Try a different model just for this run — your saved prompt isn't changed.
+          The provider is detected automatically from the model.
         </div>
       </div>
 
@@ -97,25 +94,37 @@
 </div>
 
 <script>
-  // Update API key when provider changes
+  // Swap the API key to match the provider inferred from the selected model.
   document.addEventListener('DOMContentLoaded', function() {
-    const providerSelect = document.getElementById('provider');
+    const modelSelect = document.getElementById('model');
     const apiKeyField = document.getElementById('api_key');
-    const helpText = apiKeyField.parentElement.querySelector('.form__help');
-    
-    if (providerSelect && apiKeyField) {
+
+    if (modelSelect && apiKeyField) {
+      const helpText = apiKeyField.parentElement.querySelector('.form__help');
       const anthropicKey = apiKeyField.dataset.anthropicKey;
       const openaiKey = apiKeyField.dataset.openaiKey;
-      
-      providerSelect.addEventListener('change', function() {
-        const selectedProvider = this.value;
-        
-        if (selectedProvider === 'anthropic' && anthropicKey) {
-          apiKeyField.value = anthropicKey;
-          apiKeyField.placeholder = 'Using saved API key';
-          helpText.innerHTML = 'Using saved API key from settings. <a href="<%= edit_settings_path %>" class="link">Change in settings</a>';
-        } else if (selectedProvider === 'openai' && openaiKey) {
-          apiKeyField.value = openaiKey;
+
+      // Mirror PromptEngine.configuration.model_provider_patterns (serialized
+      // server-side). Ruby's \A/\z anchors are translated to JS equivalents.
+      const providerPatterns = JSON.parse(modelSelect.dataset.providerPatterns || '{}');
+      function providerForModel(model) {
+        for (const name of Object.keys(providerPatterns)) {
+          const spec = providerPatterns[name];
+          const jsSource = spec.source.replace(/\\A/g, '^').replace(/\\[zZ]/g, '$');
+          if (new RegExp(jsSource, spec.ignore_case ? 'i' : '').test(model)) {
+            return name;
+          }
+        }
+        return null;
+      }
+
+      modelSelect.addEventListener('change', function() {
+        const provider = providerForModel(this.value);
+        const savedKey = provider === 'anthropic' ? anthropicKey :
+                         provider === 'openai' ? openaiKey : '';
+
+        if (savedKey) {
+          apiKeyField.value = savedKey;
           apiKeyField.placeholder = 'Using saved API key';
           helpText.innerHTML = 'Using saved API key from settings. <a href="<%= edit_settings_path %>" class="link">Change in settings</a>';
         } else {

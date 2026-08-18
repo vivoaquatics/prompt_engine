@@ -1,0 +1,145 @@
+/* Dark mode overrides for components that use hardcoded hex colors */
+@media (prefers-color-scheme: dark) {
+  /* Table status badges */
+  .table__badge--active {
+    background-color: rgba(22, 101, 52, 0.35);
+    color: #86efac;
+  }
+
+  .table__badge--archived {
+    background-color: rgba(146, 64, 14, 0.35);
+    color: #fbbf24;
+  }
+
+  .table__badge--info {
+    background-color: rgba(30, 64, 175, 0.35);
+    color: #93c5fd;
+  }
+
+  .table__badge--warning {
+    background-color: rgba(194, 65, 12, 0.35);
+    color: #fdba74;
+  }
+
+  .table__badge--success {
+    background-color: rgba(22, 101, 52, 0.35);
+    color: #86efac;
+  }
+
+  .table__badge--pending {
+    background-color: rgba(55, 65, 81, 0.5);
+    color: var(--color-gray-300);
+  }
+
+  .table__badge--running {
+    background-color: rgba(91, 33, 182, 0.35);
+    color: #c4b5fd;
+  }
+
+  .table__badge--completed {
+    background-color: rgba(6, 95, 70, 0.35);
+    color: #6ee7b7;
+  }
+
+  .table__badge--failed {
+    background-color: rgba(153, 27, 27, 0.35);
+    color: #fca5a5;
+  }
+
+  /* Alert components */
+  .alert--success {
+    background-color: rgba(22, 101, 52, 0.2);
+    color: #86efac;
+    border-color: rgba(22, 101, 52, 0.4);
+  }
+
+  .alert--warning {
+    background-color: rgba(146, 64, 14, 0.2);
+    color: #fbbf24;
+    border-color: rgba(146, 64, 14, 0.4);
+  }
+
+  .alert--danger {
+    background-color: rgba(153, 27, 27, 0.2);
+    color: #fca5a5;
+    border-color: rgba(153, 27, 27, 0.4);
+  }
+
+  .alert--info {
+    background-color: rgba(30, 64, 175, 0.2);
+    color: #93c5fd;
+    border-color: rgba(30, 64, 175, 0.4);
+  }
+
+  /* Form error block */
+  .form__errors {
+    background-color: rgba(153, 27, 27, 0.2);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  /* Version diff highlight blocks */
+  .version-compare__diff-content--old,
+  .version-compare__diff-value--old {
+    background-color: rgba(153, 27, 27, 0.2);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+  }
+
+  .version-compare__diff-content--new,
+  .version-compare__diff-value--new {
+    background-color: rgba(6, 95, 70, 0.2);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #6ee7b7;
+  }
+
+  /* Version current item uses primary-50 which is too light in dark */
+  .version-item--current .version-card {
+    background-color: rgba(79, 70, 229, 0.15);
+    border-color: var(--color-primary-500);
+  }
+
+  /* Notification semantic backgrounds (primary/success/danger/warning-50 are too light) */
+  .admin-notification--notice {
+    background-color: rgba(99, 102, 241, 0.15);
+    color: var(--color-primary-300);
+  }
+
+  .admin-notification--success {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: #6ee7b7;
+  }
+
+  .admin-notification--alert,
+  .admin-notification--error {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+  }
+
+  .admin-notification--warning {
+    background-color: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+  }
+
+  /* Overrides sidebar link colors set in overrides.css */
+  .admin-sidebar a.admin-nav__link,
+  .admin-sidebar a.admin-nav__link:link,
+  .admin-sidebar a.admin-nav__link:visited {
+    color: var(--color-sidebar-text-muted);
+  }
+
+  /* Skeleton loading */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--color-gray-700) 25%,
+      var(--color-gray-600) 50%,
+      var(--color-gray-700) 75%
+    );
+    background-size: 200% 100%;
+  }
+
+  /* Progress bar track */
+  .progress {
+    background-color: var(--color-border);
+  }
+}

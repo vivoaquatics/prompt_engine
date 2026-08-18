@@ -54,14 +54,14 @@
 
     <div id="parameters-list" class="parameters-list">
       <!-- Parameters will be dynamically inserted here -->
+      <!--
+        Hidden id/_destroy fields are emitted by the JavaScript below, keyed by
+        the same detection-order index as the rest of each parameter's fields.
+        Do NOT also render them here with `fields_for :parameters`: that block
+        keys ids by parameter *position*, which collides with the JS indexing
+        and causes "Name has already been taken" when the two orders diverge.
+      -->
     </div>
-
-    <%= form.fields_for :parameters do |parameter_form| %>
-      <div class="parameter-fields" style="display: none;">
-        <%= parameter_form.hidden_field :id %>
-        <%= parameter_form.hidden_field :_destroy %>
-      </div>
-    <% end %>
   </div>
 
   <div class="form__inline">
@@ -243,6 +243,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (contentField) {
     contentField.addEventListener('input', detectVariables);
+  }
+
+  if (systemField) {
+    systemField.addEventListener('input', detectVariables);
+  }
+
+  if (contentField || systemField) {
     // Detect variables on page load
     detectVariables();
   }

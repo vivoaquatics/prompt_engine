@@ -2,14 +2,14 @@
 .admin-layout {
   display: flex;
   min-height: 100vh;
-  background-color: var(--color-gray-50);
+  background-color: var(--color-bg-page);
 }
 
 /* Sidebar Container */
 .admin-layout__sidebar {
   width: var(--sidebar-width);
-  background-color: var(--color-gray-900);
-  color: var(--color-gray-100);
+  background-color: var(--color-sidebar-bg);
+  color: var(--color-sidebar-text);
   position: fixed;
   top: 0;
   left: 0;
@@ -23,7 +23,7 @@
   flex: 1;
   margin-left: var(--sidebar-width);
   min-height: 100vh;
-  background-color: var(--color-gray-50);
+  background-color: var(--color-bg-page);
 }
 
 .admin-main {
@@ -44,12 +44,12 @@
   margin: 0;
   font-size: var(--font-size-2xl);
   font-weight: 600;
-  color: var(--color-gray-900);
+  color: var(--color-text-primary);
 }
 
 .admin-header p {
   margin: var(--spacing-xs) 0 0;
-  color: var(--color-gray-600);
+  color: var(--color-text-secondary);
 }
 
 /* Responsive Layout */

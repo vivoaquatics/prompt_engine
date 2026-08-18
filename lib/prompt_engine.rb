@@ -79,6 +79,12 @@ module PromptEngine
     #   options_for_model_select [Array<Array<String>>]: An array of pairs, where each pair contains
     #     the display name and the identifier for a supported AI model.
     #
+    #   model_provider_patterns [Hash<String, Regexp>]: Maps a provider name to a pattern matched
+    #     against a model id. Used by the playground to infer which provider (and saved API key) a
+    #     selected model belongs to, so no separate provider field is needed. Patterns should stay
+    #     simple (prefixes / alternations) so they also work client-side; use `^` rather than `\A`
+    #     if you want the anchor to translate cleanly to JavaScript.
+    #
     # Examples:
     #   PromptEngine.configure do |config|
     #     config.options_for_model_select << ["New Model", "new-model-id"]
@@ -88,10 +94,15 @@ module PromptEngine
     #     config.options_for_model_select = ["New Model", "new-model-id", ...]
     #   end
     #
+    #   # Teach the playground that ids starting with "my-llm" are OpenAI-compatible:
+    #   PromptEngine.configure do |config|
+    #     config.model_provider_patterns["openai"] = /^(gpt|o\d|my-llm)/i
+    #   end
+    #
     # Usage:
     #   Use this class to retrieve or modify the available model options for selection in the application.
     class Configuration
-      attr_accessor :options_for_model_select
+      attr_accessor :options_for_model_select, :model_provider_patterns
 
       def initialize
         @options_for_model_select = [
@@ -102,6 +113,11 @@ module PromptEngine
           ["Claude 3 Sonnet", "claude-3-sonnet"],
           ["Claude 3 Haiku", "claude-3-haiku"]
         ]
+
+        @model_provider_patterns = {
+          "anthropic" => /\A(claude|anthropic)/i,
+          "openai" => /\A(gpt|o\d|chatgpt|text-|davinci|openai)/i
+        }
       end
     end
   end

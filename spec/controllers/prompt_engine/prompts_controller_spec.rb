@@ -83,7 +83,7 @@
 #
 #         it 'returns unprocessable entity status' do
 #           post :create, params: { prompt: invalid_attributes }
-#           expect(response).to have_http_status(:unprocessable_entity)
+#           expect(response).to have_http_status(:unprocessable_content)
 #         end
 #       end
 #     end
@@ -138,7 +138,7 @@
 #
 #         it 'returns unprocessable entity status' do
 #           put :update, params: { id: prompt.to_param, prompt: invalid_attributes }
-#           expect(response).to have_http_status(:unprocessable_entity)
+#           expect(response).to have_http_status(:unprocessable_content)
 #         end
 #       end
 #     end
