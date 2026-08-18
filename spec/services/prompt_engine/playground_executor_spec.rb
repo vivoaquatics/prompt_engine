@@ -79,6 +79,12 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
         # This will be overridden in specific tests
       end
 
+      # Real ruby_llm defines RubyLLM::ModelNotFoundError < StandardError; the mock module
+      # above replaces RubyLLM wholesale, so build_chat's rescue clause needs its own const
+      # to resolve against, or a future RubyLLM.chat raise would surface as a confusing
+      # NameError instead of exercising the rescue-fallback.
+      mock_ruby_llm.const_set(:ModelNotFoundError, Class.new(StandardError))
+
       stub_const("RubyLLM", mock_ruby_llm)
     end
 
@@ -254,6 +260,81 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
       end
     end
 
+    context "with the configured model allowlist" do
+      let(:mock_chat) { double("chat") }
+      let(:mock_response) { double("response", content: "ok") }
+
+      before do
+        allow(RubyLLM).to receive(:chat).and_return(mock_chat)
+        allow(mock_chat).to receive(:with_temperature).and_return(mock_chat)
+        allow(mock_chat).to receive(:with_instructions).and_return(mock_chat)
+        allow(mock_chat).to receive(:ask).and_return(mock_response)
+      end
+
+      it "allows a model present in PromptEngine.configuration.options_for_model_select" do
+        executor = described_class.new(
+          prompt: prompt,
+          api_key: "test-key",
+          parameters: valid_parameters,
+          model: "claude-3-5-sonnet-20241022"
+        )
+        allow(executor).to receive(:require).with("ruby_llm")
+
+        expect { executor.execute }.not_to raise_error
+      end
+
+      it "rejects a model that matches a provider pattern but is not configured" do
+        executor = described_class.new(
+          prompt: prompt,
+          api_key: "test-key",
+          parameters: valid_parameters,
+          model: "gpt-9-fake"
+        )
+
+        expect { executor.execute }.to raise_error(ArgumentError, "Unsupported model: gpt-9-fake")
+      end
+    end
+
+    context "when ruby_llm does not know the model" do
+      let(:mock_chat) { double("chat") }
+      let(:mock_response) { double("response", content: "Luna response") }
+
+      before do
+        allow(mock_chat).to receive(:with_temperature).and_return(mock_chat)
+        allow(mock_chat).to receive(:with_instructions).and_return(mock_chat)
+        allow(mock_chat).to receive(:ask).and_return(mock_response)
+      end
+
+      it "retries with assume_model_exists and the inferred provider after a ModelNotFoundError" do
+        call_count = 0
+        allow(RubyLLM).to receive(:chat) do |**_options|
+          call_count += 1
+          raise RubyLLM::ModelNotFoundError, "unknown model" if call_count == 1
+
+          mock_chat
+        end
+
+        result = executor.execute
+
+        expect(RubyLLM).to have_received(:chat).with(model: "gpt-4o")
+        expect(RubyLLM).to have_received(:chat).with(
+          model: "gpt-4o", provider: "openai", assume_model_exists: true
+        )
+        expect(RubyLLM).to have_received(:chat).twice
+        expect(result[:model]).to eq("gpt-4o")
+        expect(result[:provider]).to eq("openai")
+      end
+
+      it "does not pass assume_model_exists for a registry-known model on the happy path" do
+        allow(RubyLLM).to receive(:chat).and_return(mock_chat)
+
+        executor.execute
+
+        expect(RubyLLM).to have_received(:chat).with(model: "gpt-4o")
+        expect(RubyLLM).not_to have_received(:chat).with(hash_including(:assume_model_exists))
+      end
+    end
+
     context "with API errors" do
       let(:mock_chat) { double("chat") }
 
@@ -364,6 +445,26 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
 
     it "returns nil for models it cannot map" do
       expect(provider_for("some-unknown-model")).to be_nil
+    end
+
+    it "infers openai from GPT-5.6 Sol" do
+      expect(provider_for("gpt-5.6-sol")).to eq("openai")
+    end
+
+    it "infers openai from GPT-5.6 Terra" do
+      expect(provider_for("gpt-5.6-terra")).to eq("openai")
+    end
+
+    it "infers openai from GPT-5.6 Luna" do
+      expect(provider_for("gpt-5.6-luna")).to eq("openai")
+    end
+
+    it "infers anthropic from Claude Opus 5" do
+      expect(provider_for("claude-opus-5")).to eq("anthropic")
+    end
+
+    it "infers anthropic from Claude Sonnet 5" do
+      expect(provider_for("claude-sonnet-5")).to eq("anthropic")
     end
 
     it "honors custom configured patterns" do
