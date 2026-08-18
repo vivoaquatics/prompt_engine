@@ -109,9 +109,12 @@ module PromptEngine
           ["GPT-4", "gpt-4"],
           ["GPT-4 Turbo", "gpt-4-turbo-preview"],
           ["GPT-3.5 Turbo", "gpt-3.5-turbo"],
+          ["GPT-4o", "gpt-4o"],
           ["Claude 3 Opus", "claude-3-opus"],
           ["Claude 3 Sonnet", "claude-3-sonnet"],
-          ["Claude 3 Haiku", "claude-3-haiku"]
+          ["Claude 3 Haiku", "claude-3-haiku"],
+          ["Claude 3.5 Sonnet", "claude-3-5-sonnet-20241022"],
+          ["Claude 3 Opus (20240229)", "claude-3-opus-20240229"]
         ]
 
         @model_provider_patterns = {
