@@ -37,7 +37,7 @@ module PromptEngine
       configure_ruby_llm
 
       # Create chat instance with the selected model (override or provider default)
-      chat = RubyLLM.chat(model: selected_model)
+      chat = build_chat
 
       # Apply temperature if specified
       if prompt.temperature.present?
@@ -84,10 +84,26 @@ module PromptEngine
 
     private
 
+    # ruby_llm resolves model ids against its bundled registry (models.json), which
+    # lags provider releases. When a configured model id is not in that registry we
+    # retry with assume_model_exists:, passing the provider we already inferred from
+    # PromptEngine.configuration.model_provider_patterns. Known models keep their
+    # full registry metadata; only unknown ids take the assumed path.
+    def build_chat
+      RubyLLM.chat(model: selected_model)
+    rescue RubyLLM::ModelNotFoundError
+      RubyLLM.chat(model: selected_model, provider: provider, assume_model_exists: true)
+    end
+
     def validate_inputs!
       raise ArgumentError, "Model is required" if selected_model.blank?
       raise ArgumentError, "API key is required" if api_key.blank?
       raise ArgumentError, "Unsupported model: #{selected_model}" if provider.blank?
+
+      allowed_models = PromptEngine.configuration.options_for_model_select.map(&:last)
+      unless allowed_models.include?(selected_model)
+        raise ArgumentError, "Unsupported model: #{selected_model}"
+      end
     end
 
     def configure_ruby_llm
