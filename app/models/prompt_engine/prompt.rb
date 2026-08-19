@@ -2,6 +2,8 @@ module PromptEngine
   class Prompt < ApplicationRecord
     self.table_name = "prompt_engine_prompts"
 
+    include PromptEngine::ReasoningColumnGuard
+
     has_many :versions, -> { order(version_number: :desc) },
       class_name: "PromptEngine::PromptVersion",
       dependent: :destroy
@@ -30,14 +32,28 @@ module PromptEngine
     scope :by_name, -> { order(:name) }
 
     before_validation :generate_slug_from_name, on: :create
+    # Only reconcile on an actual model CHANGE to an *existing* record. A new
+    # record's `model` always reads as "changed" (from nil), so scoping this
+    # to `model_changed?` alone would silently coerce an invalid
+    # model+reasoning_effort combination to nil on every create, before the
+    # `inclusion` validator below ever runs - making create-time validation
+    # dead code (CVP-1797 code review, iteration 1).
+    before_validation :reconcile_reasoning_effort, if: -> { persisted? && model_changed? }
     after_create :create_initial_version
     after_create :sync_parameters!
     after_update :create_version_if_changed
     after_update :sync_parameters!, if: :saved_change_to_template?
     before_save :clean_orphaned_parameters
 
-    VERSIONED_ATTRIBUTES = %w[content system_message model temperature max_tokens metadata].freeze
-    OVERRIDE_KEYS = %i[model temperature max_tokens version].freeze
+    validates :reasoning_effort,
+      inclusion: {
+        in: ->(prompt) { PromptEngine::Reasoning.values_for(prompt.model) },
+        message: "is not available for this model"
+      },
+      allow_blank: true
+
+    VERSIONED_ATTRIBUTES = %w[content system_message model temperature max_tokens reasoning_effort metadata].freeze
+    OVERRIDE_KEYS = %i[model temperature max_tokens reasoning_effort version].freeze
 
     def current_version
       versions.first
@@ -137,6 +153,7 @@ module PromptEngine
         model: model,
         temperature: temperature,
         max_tokens: max_tokens,
+        reasoning_effort: reasoning_effort,
         parameters_used: casted_params
       }
     end
@@ -199,6 +216,7 @@ module PromptEngine
         model: version.model,
         temperature: version.temperature,
         max_tokens: version.max_tokens,
+        reasoning_effort: version.reasoning_effort,
         parameters_used: variables,
         version_number: version.version_number
       }
@@ -220,6 +238,7 @@ module PromptEngine
         model: model,
         temperature: temperature,
         max_tokens: max_tokens,
+        reasoning_effort: reasoning_effort,
         metadata: metadata,
         change_description: "Initial version"
       )
@@ -235,9 +254,16 @@ module PromptEngine
         model: model,
         temperature: temperature,
         max_tokens: max_tokens,
+        reasoning_effort: reasoning_effort,
         metadata: metadata,
         change_description: "Updated: #{(saved_changes.keys & VERSIONED_ATTRIBUTES).join(", ")}"
       )
+    end
+
+    def reconcile_reasoning_effort
+      return if PromptEngine::Reasoning.values_for(model).include?(reasoning_effort)
+
+      self.reasoning_effort = nil
     end
 
     def clean_orphaned_parameters

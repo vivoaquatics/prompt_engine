@@ -43,6 +43,32 @@ module PromptEngine
       @overrides[:max_tokens] || @rendered_data[:max_tokens]
     end
 
+    # The named effort-level string, for OpenAI's `reasoning_effort:` wire
+    # parameter (see `to_openai_params`). `reasoning_effort` is an
+    # OpenAI-only wire parameter - `ruby_llm`'s Anthropic provider never
+    # accepts a top-level `reasoning_effort:` key (it uses `thinking:` /
+    # `output_config: {effort:}` internally, driven by `with_thinking`; see
+    # `reasoning_thinking_args` and `execute_with` below). Only meaningful
+    # for "effort"-mode model families - returns nil for "budget"-mode
+    # families (e.g. claude-haiku-4-5), whose value is a *token count*, not
+    # this string.
+    #
+    # Resolved against `model` (the override-aware accessor above), so an
+    # `options: { model: ... }` override reconciles correctly and a value
+    # is always returned for reasoning-capable effort-mode models
+    # (request-time default).
+    def reasoning_effort
+      return nil unless PromptEngine::Reasoning.config_for(model)&.fetch(:mode, nil) == "effort"
+
+      PromptEngine::Reasoning.resolve(model, @overrides[:reasoning_effort] || @rendered_data[:reasoning_effort])
+    end
+
+    # The keyword arguments to splat into `chat.with_thinking(...)`, or nil
+    # when `model` supports no reasoning.
+    def reasoning_thinking_args
+      PromptEngine::Reasoning.thinking_args(model, @overrides[:reasoning_effort] || @rendered_data[:reasoning_effort])
+    end
+
     def system_message
       @overrides[:system_message] || @rendered_data[:system_message]
     end
@@ -61,14 +87,28 @@ module PromptEngine
         model: model || "gpt-4",
         messages: messages,
         temperature: temperature,
-        max_tokens: max_tokens
+        max_tokens: max_tokens,
+        reasoning_effort: reasoning_effort
       }.compact
 
       # Merge with additional options (tools, functions, response_format, etc.)
       base_params.merge(additional_options)
     end
 
-    # For RubyLLM compatibility
+    # For RubyLLM compatibility. Deliberately carries NO `reasoning_effort:`
+    # key, for ANY model family (effort-mode or budget-mode) - unlike
+    # `to_openai_params`, `reasoning_effort` is an OpenAI-only wire
+    # parameter, and `ruby_llm`'s Anthropic provider never accepts a
+    # top-level `reasoning_effort:` key. The real reasoning channel for
+    # `ruby_llm`/Anthropic is `with_thinking` (`thinking:` /
+    # `output_config: {effort:}` under the hood), driven by
+    # `reasoning_thinking_args` below - NOT a wire parameter, and
+    # intentionally excluded from this hash (and from `to_h`) because it
+    # gets splatted directly into `client.chat(**params)` in `execute_with`,
+    # and a client with a strict kwargs signature would raise
+    # `ArgumentError: unknown keyword: :reasoning_thinking_args`. Call the
+    # `reasoning_thinking_args` reader directly and pass it to
+    # `chat.with_thinking(**...)` instead - see `execute_with` below.
     def to_ruby_llm_params(**additional_options)
       base_params = {
         messages: messages,
@@ -89,7 +129,9 @@ module PromptEngine
         client.chat(parameters: params)
       when /RubyLLM/, /Anthropic/
         params = to_ruby_llm_params(**options)
-        client.chat(**params)
+        args = reasoning_thinking_args
+        target = args && client.respond_to?(:with_thinking) ? client.with_thinking(**args) : client
+        target.chat(**params)
       else
         raise ArgumentError, "Unknown client type: #{client.class.name}"
       end
@@ -117,7 +159,17 @@ module PromptEngine
       @parameters.key?(key.to_s)
     end
 
-    # Convenience methods
+    # Convenience methods. Deliberately carries NO `reasoning_effort:` key -
+    # like `to_ruby_llm_params`, that wire parameter is OpenAI-only (see
+    # `to_openai_params`); merging it here for every provider, including
+    # Anthropic's effort-mode families (e.g. claude-opus-4-8), would be
+    # both redundant (the real mechanism is `with_thinking`, driven by
+    # `reasoning_thinking_args`) and wrong for a caller that splats this
+    # hash directly at an Anthropic client. `reasoning_thinking_args` is
+    # deliberately NOT included here either - it is not a wire parameter,
+    # only a reader for callers that want to call
+    # `chat.with_thinking(**...)` themselves; see the comment on
+    # `to_ruby_llm_params` above.
     def to_h
       {
         content: content,

@@ -2,6 +2,8 @@ module PromptEngine
   class PromptVersion < ApplicationRecord
     self.table_name = "prompt_engine_prompt_versions"
 
+    include PromptEngine::ReasoningColumnGuard
+
     belongs_to :prompt, class_name: "PromptEngine::Prompt", counter_cache: :versions_count
     has_many :playground_run_results, class_name: "PromptEngine::PlaygroundRunResult", dependent: :destroy
     has_many :eval_runs, class_name: "PromptEngine::EvalRun", dependent: :destroy
@@ -18,8 +20,22 @@ module PromptEngine
     scope :chronological, -> { order(created_at: :asc) }
 
     def restore!
+      attrs = to_prompt_attributes
+
+      # A version's own reasoning_effort can be invalid for its own model by
+      # the time it's restored: the value may have been valid when this
+      # version was created but since removed from model_reasoning_options,
+      # or the model's reasoning options may simply differ between the
+      # version's snapshot and now. Since Prompt's inclusion validation
+      # always fires, sanitize here rather than let a stale/invalid value
+      # veto the entire restore (raising ActiveRecord::RecordInvalid and
+      # rolling back every other field too).
+      unless PromptEngine::Reasoning.values_for(attrs[:model]).include?(attrs[:reasoning_effort])
+        attrs[:reasoning_effort] = nil
+      end
+
       # Update the prompt attributes
-      prompt.update!(to_prompt_attributes)
+      prompt.update!(attrs)
 
       # Check if a version was created (attributes changed)
       latest_version = prompt.versions.first
@@ -30,7 +46,7 @@ module PromptEngine
       else
         # No version was created (no changes), create one manually
         prompt.versions.create!(
-          to_prompt_attributes.merge(
+          attrs.merge(
             change_description: "Restored from version #{version_number}"
           )
         )
@@ -44,6 +60,7 @@ module PromptEngine
         model: model,
         temperature: temperature,
         max_tokens: max_tokens,
+        reasoning_effort: reasoning_effort,
         metadata: metadata
       }
     end
@@ -59,7 +76,7 @@ module PromptEngine
     end
 
     def ensure_immutability
-      immutable_attributes = %w[content system_message model temperature max_tokens]
+      immutable_attributes = %w[content system_message model temperature max_tokens reasoning_effort]
       changed_immutable = (changed & immutable_attributes)
 
       if changed_immutable.any?

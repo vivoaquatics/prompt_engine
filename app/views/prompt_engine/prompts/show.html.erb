@@ -57,6 +57,11 @@
         </div>
 
         <div class="detail-item">
+          <label class="detail-label">Reasoning</label>
+          <div class="detail-value"><%= @prompt.reasoning_effort || "Default" %></div>
+        </div>
+
+        <div class="detail-item">
           <label class="detail-label">Created</label>
           <div class="detail-value"><%= @prompt.created_at.strftime("%B %d, %Y at %I:%M %p") %></div>
         </div>

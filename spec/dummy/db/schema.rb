@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_08_06_145216) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_18_235258) do
   create_table "prompt_engine_eval_results", force: :cascade do |t|
     t.integer "eval_run_id", null: false
     t.integer "test_case_id", null: false
@@ -90,6 +90,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_08_06_145216) do
     t.integer "max_tokens"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "reasoning_effort"
     t.index ["created_at"], name: "index_prompt_engine_playground_run_results_on_created_at"
     t.index ["prompt_version_id"], name: "idx_on_prompt_version_id_747dcd550d"
     t.index ["provider"], name: "index_prompt_engine_playground_run_results_on_provider"
@@ -108,6 +109,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_08_06_145216) do
     t.text "change_description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "reasoning_effort"
     t.index ["prompt_id", "version_number"], name: "index_prompt_versions_on_prompt_and_version", unique: true
     t.index ["prompt_id"], name: "index_prompt_engine_prompt_versions_on_prompt_id"
     t.index ["version_number"], name: "index_prompt_engine_prompt_versions_on_version_number"
@@ -127,6 +129,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_08_06_145216) do
     t.string "slug"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "reasoning_effort"
     t.index ["slug"], name: "index_prompt_engine_prompts_on_slug", unique: true
   end
 

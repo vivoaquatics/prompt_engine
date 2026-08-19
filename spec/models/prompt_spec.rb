@@ -43,6 +43,86 @@ RSpec.describe PromptEngine::Prompt, type: :model do
         expect(prompt.errors[:status]).to be_empty
       end
     end
+
+    describe "reasoning_effort" do
+      it "is valid when blank, regardless of model" do
+        prompt = PromptEngine::Prompt.new(name: "test", content: "Test content", model: "gpt-4", reasoning_effort: nil)
+        prompt.valid?
+        expect(prompt.errors[:reasoning_effort]).to be_empty
+
+        prompt.reasoning_effort = ""
+        prompt.valid?
+        expect(prompt.errors[:reasoning_effort]).to be_empty
+      end
+
+      it "is valid when set to a value supported by the model" do
+        prompt = PromptEngine::Prompt.new(name: "test", content: "Test content", model: "gpt-5.6-sol", reasoning_effort: "xhigh")
+        prompt.valid?
+        expect(prompt.errors[:reasoning_effort]).to be_empty
+      end
+
+      it "is invalid when set to a value not supported by the model, on create" do
+        prompt = PromptEngine::Prompt.new(name: "test", content: "Test content", model: "gpt-5", reasoning_effort: "xhigh")
+
+        expect(prompt).not_to be_valid
+        expect(prompt.errors[:reasoning_effort]).to include("is not available for this model")
+      end
+
+      it "is invalid when a crafted update sets a value not supported by the model, without changing the model" do
+        prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "xhigh")
+
+        prompt.reasoning_effort = "not-a-real-value"
+
+        expect(prompt).not_to be_valid
+        expect(prompt.errors[:reasoning_effort]).to include("is not available for this model")
+        # The invalid value must not have been silently reconciled away -
+        # reconciliation is scoped to model_changed?, so this is the
+        # validator's job alone.
+        expect(prompt.reasoning_effort).to eq("not-a-real-value")
+      end
+
+      it "is invalid when set on a model that supports no reasoning at all" do
+        prompt = PromptEngine::Prompt.new(name: "test", content: "Test content", model: "gpt-4o", reasoning_effort: "low")
+
+        expect(prompt).not_to be_valid
+        expect(prompt.errors[:reasoning_effort]).to include("is not available for this model")
+      end
+    end
+
+    describe "reconcile_reasoning_effort" do
+      it "clears an invalid-for-the-new-model reasoning_effort when the model changes" do
+        prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "xhigh")
+
+        prompt.update!(model: "gpt-5")
+
+        expect(prompt.reasoning_effort).to be_nil
+      end
+
+      it "clears reasoning_effort when the model changes to one with no reasoning support at all" do
+        prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "xhigh")
+
+        prompt.update!(model: "gpt-4o")
+
+        expect(prompt.reasoning_effort).to be_nil
+      end
+
+      it "preserves reasoning_effort when the model changes between two ids in the same family" do
+        prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "xhigh")
+
+        prompt.update!(model: "gpt-5.6-terra")
+
+        expect(prompt.reasoning_effort).to eq("xhigh")
+      end
+
+      it "does not run on create, so an invalid create-time combination is rejected by validation instead of silently cleared" do
+        prompt = PromptEngine::Prompt.new(name: "test", content: "Test content", model: "gpt-5", reasoning_effort: "xhigh")
+
+        prompt.valid?
+
+        expect(prompt.reasoning_effort).to eq("xhigh")
+        expect(prompt.errors[:reasoning_effort]).to include("is not available for this model")
+      end
+    end
   end
 
   describe "default values" do
@@ -133,6 +213,16 @@ RSpec.describe PromptEngine::Prompt, type: :model do
         expect(prompt.versions.count).to eq(2)
         latest_version = prompt.versions.latest.first
         expect(latest_version.max_tokens).to eq(2000)
+      end
+
+      it "creates new version when reasoning_effort changes" do
+        reasoning_prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "low")
+
+        reasoning_prompt.update!(reasoning_effort: "high")
+
+        expect(reasoning_prompt.versions.count).to eq(2)
+        latest_version = reasoning_prompt.versions.latest.first
+        expect(latest_version.reasoning_effort).to eq("high")
       end
 
       it "does not create version when only non-versioned fields change" do
@@ -303,6 +393,35 @@ RSpec.describe PromptEngine::Prompt, type: :model do
     end
   end
 
+  describe "#render" do
+    let(:prompt) { create(:prompt, :with_reasoning, content: "Hello {{name}}") }
+
+    it "exposes the prompt's own reasoning_effort through PromptEngine.render" do
+      prompt.update!(status: "active")
+
+      result = PromptEngine.render(prompt.slug, { name: "Alice" })
+
+      expect(result.reasoning_effort).to eq("high")
+    end
+
+    it "allows an explicit override to win over the stored reasoning_effort" do
+      rendered = prompt.render(name: "Alice", reasoning_effort: "max")
+
+      expect(rendered.reasoning_effort).to eq("max")
+    end
+
+    it "returns the version's own reasoning_effort, not the current prompt's, when rendering a specific version" do
+      original_version_number = prompt.current_version.version_number
+
+      prompt.update!(reasoning_effort: "low")
+      expect(prompt.current_version.version_number).not_to eq(original_version_number)
+
+      rendered = prompt.render(name: "Alice", version: original_version_number)
+
+      expect(rendered.reasoning_effort).to eq("high")
+    end
+  end
+
   describe "nested attributes" do
     it "accepts nested attributes for parameters" do
       prompt = create(:prompt, content: "Simple content without variables")
@@ -452,7 +571,16 @@ RSpec.describe PromptEngine::Prompt, type: :model do
           expect(result[:model]).to eq(prompt.model)
           expect(result[:temperature]).to eq(prompt.temperature)
           expect(result[:max_tokens]).to eq(prompt.max_tokens)
+          expect(result[:reasoning_effort]).to eq(prompt.reasoning_effort)
           expect(result[:parameters_used]).to eq({ "name" => "Alice", "item_count" => 25 })
+        end
+
+        it "includes the prompt's own reasoning_effort for a reasoning-capable model" do
+          reasoning_prompt = create(:prompt, :with_reasoning, content: "Hello {{name}}")
+
+          result = reasoning_prompt.render_with_params(name: "Alice")
+
+          expect(result[:reasoning_effort]).to eq("high")
         end
 
         it "accepts string or symbol parameter keys" do

@@ -2,6 +2,8 @@ module PromptEngine
   class PlaygroundRunResult < ApplicationRecord
     self.table_name = "prompt_engine_playground_run_results"
 
+    include PromptEngine::ReasoningColumnGuard
+
     belongs_to :prompt_version, class_name: "PromptEngine::PromptVersion"
 
     validates :provider, presence: true
