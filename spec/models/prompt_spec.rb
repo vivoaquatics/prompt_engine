@@ -87,6 +87,26 @@ RSpec.describe PromptEngine::Prompt, type: :model do
         expect(prompt).not_to be_valid
         expect(prompt.errors[:reasoning_effort]).to include("is not available for this model")
       end
+
+      it "normalizes a blank reasoning_effort to nil on create" do
+        prompt = PromptEngine::Prompt.create!(name: "test", content: "Test content", model: "gpt-5.6-sol", reasoning_effort: "")
+
+        expect(prompt.reload.reasoning_effort).to be_nil
+        expect(prompt.versions.first.reasoning_effort).to be_nil
+      end
+
+      it "does not create a version when a nil reasoning_effort is resubmitted blank" do
+        prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: nil)
+
+        expect { prompt.update!(reasoning_effort: "") }.not_to change { prompt.versions.count }
+      end
+
+      it "rejects (and preserves) an invalid non-blank reasoning_effort on create" do
+        prompt = PromptEngine::Prompt.new(name: "test", content: "Test content", model: "gpt-4o", reasoning_effort: "high")
+
+        expect(prompt).not_to be_valid
+        expect(prompt.reasoning_effort).to eq("high")
+      end
     end
 
     describe "reconcile_reasoning_effort" do
