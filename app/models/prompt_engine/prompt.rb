@@ -32,6 +32,25 @@ module PromptEngine
     scope :by_name, -> { order(:name) }
 
     before_validation :generate_slug_from_name, on: :create
+    # Unconditional: the Reasoning select submits "" (via `include_blank`)
+    # whenever it's left on its default "Default (low)" option, on both
+    # create and update. Without this, that raw "" is persisted as-is (since
+    # `allow_blank: true` on the inclusion validator below lets "" through
+    # unchanged), and every display site's `reasoning_effort || "Default"`
+    # fallback renders a blank value instead of "Default", because "" is
+    # truthy in Ruby (CVP-1797 manual test, iteration 2). This must stay
+    # separate from `reconcile_reasoning_effort` below, which is scoped to
+    # updates for its own, different reason.
+    #
+    # The method itself early-returns when the getter already reads nil
+    # (see below) so it never invokes the *setter* on a nil -> nil no-op.
+    # When the reasoning_effort column is missing pre-migration, the getter
+    # always reads nil (PromptEngine::ReasoningColumnGuard), so without that
+    # guard this callback would call the setter on every single `valid?`,
+    # tripping ReasoningColumnGuard's one-shot "writes are being silently
+    # discarded" warning even though nothing was actually discarded (CVP-1797
+    # code review, follow-up).
+    before_validation :normalize_blank_reasoning_effort
     # Only reconcile on an actual model CHANGE to an *existing* record. A new
     # record's `model` always reads as "changed" (from nil), so scoping this
     # to `model_changed?` alone would silently coerce an invalid
@@ -258,6 +277,12 @@ module PromptEngine
         metadata: metadata,
         change_description: "Updated: #{(saved_changes.keys & VERSIONED_ATTRIBUTES).join(", ")}"
       )
+    end
+
+    def normalize_blank_reasoning_effort
+      return if reasoning_effort.nil?
+
+      self.reasoning_effort = nil if reasoning_effort.blank?
     end
 
     def reconcile_reasoning_effort
