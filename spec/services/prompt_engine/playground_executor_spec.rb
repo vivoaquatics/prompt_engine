@@ -478,6 +478,161 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
     end
   end
 
+  describe "#execute applying reasoning" do
+    # The default PromptEngine.configuration.options_for_model_select does
+    # not ship any vivopoint model ids (CVP-1796 precedent - capability
+    # patterns are a gem default, ids are not), and validate_inputs! rejects
+    # any model not in that allowlist. Temporarily widen it for this describe
+    # block only, mirroring the existing "#provider honors custom configured
+    # patterns" save/restore idiom above.
+    around do |example|
+      original = PromptEngine.configuration.options_for_model_select
+      PromptEngine.configuration.options_for_model_select =
+        original + [ [ "GPT-5.6 Sol", "gpt-5.6-sol" ], [ "Claude Haiku 4.5", "claude-haiku-4-5" ] ]
+      example.run
+      PromptEngine.configuration.options_for_model_select = original
+    end
+
+    let(:mock_response) { double("response", content: "ok") }
+    let(:mock_chat) { double("chat") }
+
+    # Default: the outer `prompt` (model "gpt-4o", non-reasoning). Contexts
+    # below that need a reasoning-capable model override both `executor` and
+    # `reasoning_prompt`.
+    let(:executor) do
+      described_class.new(prompt: prompt, api_key: "test-key", parameters: valid_parameters)
+    end
+
+    before do
+      allow(executor).to receive(:require).with("ruby_llm")
+
+      config = double("Config")
+      allow(config).to receive(:anthropic_api_key=)
+      allow(config).to receive(:openai_api_key=)
+
+      mock_ruby_llm = Module.new
+      mock_ruby_llm.define_singleton_method(:configure) { |&block| block.call(config) }
+      mock_ruby_llm.define_singleton_method(:chat) { |options = {}| }
+      mock_ruby_llm.const_set(:ModelNotFoundError, Class.new(StandardError))
+      stub_const("RubyLLM", mock_ruby_llm)
+
+      allow(mock_chat).to receive(:with_temperature).and_return(mock_chat)
+      allow(mock_chat).to receive(:with_instructions).and_return(mock_chat)
+      allow(mock_chat).to receive(:ask).and_return(mock_response)
+      allow(RubyLLM).to receive(:chat).and_return(mock_chat)
+    end
+
+    context "with an effort-mode reasoning model" do
+      let(:reasoning_prompt) do
+        FactoryBot.create(:prompt,
+          content: "Tell me about {{topic}} in {{style}} style",
+          model: "gpt-5.6-sol",
+          reasoning_effort: "high"
+        )
+      end
+
+      let(:executor) do
+        described_class.new(prompt: reasoning_prompt, api_key: "test-key", parameters: valid_parameters)
+      end
+
+      it "calls with_thinking with the prompt's stored effort" do
+        allow(mock_chat).to receive(:with_thinking).with(effort: "high").and_return(mock_chat)
+
+        executor.execute
+
+        expect(mock_chat).to have_received(:with_thinking).with(effort: "high")
+      end
+
+      it "returns the resolved reasoning_effort in the result hash" do
+        allow(mock_chat).to receive(:with_thinking).and_return(mock_chat)
+
+        result = executor.execute
+
+        expect(result[:reasoning_effort]).to eq("high")
+      end
+    end
+
+    context "when no reasoning_effort is stored (request-time default)" do
+      let(:reasoning_prompt) do
+        FactoryBot.create(:prompt,
+          content: "Tell me about {{topic}} in {{style}} style",
+          model: "gpt-5.6-sol",
+          reasoning_effort: nil
+        )
+      end
+
+      let(:executor) do
+        described_class.new(prompt: reasoning_prompt, api_key: "test-key", parameters: valid_parameters)
+      end
+
+      it "defaults to low - a value is always sent for a reasoning-capable model" do
+        allow(mock_chat).to receive(:with_thinking).with(effort: "low").and_return(mock_chat)
+
+        executor.execute
+
+        expect(mock_chat).to have_received(:with_thinking).with(effort: "low")
+      end
+    end
+
+    context "with a budget-mode reasoning model" do
+      let(:reasoning_prompt) do
+        FactoryBot.create(:prompt,
+          content: "Tell me about {{topic}} in {{style}} style",
+          model: "claude-haiku-4-5",
+          reasoning_effort: "medium"
+        )
+      end
+
+      let(:executor) do
+        described_class.new(prompt: reasoning_prompt, api_key: "anthropic-key", parameters: valid_parameters)
+      end
+
+      it "calls with_thinking with the token budget, not the named level" do
+        allow(mock_chat).to receive(:with_thinking).with(budget: 8192).and_return(mock_chat)
+
+        executor.execute
+
+        expect(mock_chat).to have_received(:with_thinking).with(budget: 8192)
+      end
+    end
+
+    context "with a non-reasoning model" do
+      it "never calls with_thinking" do
+        expect(mock_chat).not_to receive(:with_thinking)
+
+        executor.execute
+      end
+
+      it "returns nil for reasoning_effort in the result hash" do
+        result = executor.execute
+
+        expect(result[:reasoning_effort]).to be_nil
+      end
+    end
+
+    context "when the chat object does not support with_thinking (older ruby_llm)" do
+      let(:reasoning_prompt) do
+        FactoryBot.create(:prompt,
+          content: "Tell me about {{topic}} in {{style}} style",
+          model: "gpt-5.6-sol",
+          reasoning_effort: "high"
+        )
+      end
+
+      let(:executor) do
+        described_class.new(prompt: reasoning_prompt, api_key: "test-key", parameters: valid_parameters)
+      end
+
+      it "executes successfully without sending reasoning" do
+        # mock_chat is a bare double here - with_thinking was never stubbed,
+        # so respond_to?(:with_thinking) is false, exercising the guard.
+        result = executor.execute
+
+        expect(result[:response]).to eq("ok")
+      end
+    end
+  end
+
   describe "#selected_model" do
     it "returns the override when one is provided" do
       executor = described_class.new(

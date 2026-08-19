@@ -25,6 +25,7 @@ module PromptEngine
         @token_count = result[:token_count]
         @model = result[:model]
         @provider = result[:provider]
+        @reasoning_effort = result[:reasoning_effort]
 
         # Store the rendered prompt for display
         content_parser = ParameterParser.new(@prompt.content)
@@ -44,7 +45,8 @@ module PromptEngine
           execution_time: @execution_time,
           token_count: @token_count,
           temperature: @prompt.temperature,
-          max_tokens: @prompt.max_tokens
+          max_tokens: @prompt.max_tokens,
+          reasoning_effort: @reasoning_effort
         )
       rescue => e
         @error = e.message

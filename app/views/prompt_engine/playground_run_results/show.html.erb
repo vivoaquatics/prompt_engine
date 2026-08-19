@@ -66,6 +66,13 @@
             <div class="detail-value"><%= @playground_run_result.max_tokens %></div>
           </div>
         <% end %>
+
+        <% if @playground_run_result.reasoning_effort.present? %>
+          <div class="detail-item">
+            <label class="detail-label">Reasoning</label>
+            <div class="detail-value"><%= @playground_run_result.reasoning_effort %></div>
+          </div>
+        <% end %>
       </div>
     </div>
   </div>

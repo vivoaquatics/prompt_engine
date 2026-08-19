@@ -13,3 +13,4 @@
 coverage
 /spec/dummy/log/*
 rspec_output.txt
+.dev/

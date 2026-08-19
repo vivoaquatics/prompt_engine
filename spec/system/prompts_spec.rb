@@ -240,6 +240,68 @@ RSpec.describe "Prompts management", type: :system do
     end
   end
 
+  describe "Reasoning field" do
+    # options_for_model_select ships empty of vivopoint model ids by default
+    # (CVP-1796 precedent) - widen it here so the AI Model dropdown actually
+    # offers a reasoning-capable id to select in these system specs.
+    around do |example|
+      original = PromptEngine.configuration.options_for_model_select
+      PromptEngine.configuration.options_for_model_select =
+        original + [ [ "GPT-5.6 Sol", "gpt-5.6-sol" ] ]
+      example.run
+      PromptEngine.configuration.options_for_model_select = original
+    end
+
+    it "is hidden on the new-prompt form, since no model is selected yet server-side" do
+      # rack_test cannot execute the change-event JS that would populate the
+      # field after picking a model in the AI Model dropdown - the server
+      # only ever renders the correct state for the (blank, on a brand new
+      # record) saved model. This is expected, not a bug: see _form.html.erb.
+      visit "/prompt_engine/prompts/new"
+
+      expect(page).not_to have_select("Reasoning")
+    end
+
+    it "shows and persists a reasoning value when editing a prompt already on a reasoning-capable model" do
+      prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "low")
+
+      visit "/prompt_engine/prompts/#{prompt.id}/edit"
+      select "High", from: "Reasoning"
+      click_button "Update Prompt"
+
+      expect(page).to have_content("Prompt was successfully updated.")
+      expect(prompt.reload.reasoning_effort).to eq("high")
+    end
+
+    it "hides the Reasoning field when editing a prompt on a non-reasoning-capable model" do
+      prompt = create(:prompt, model: "gpt-4o")
+
+      visit "/prompt_engine/prompts/#{prompt.id}/edit"
+
+      # rack_test honors inline style="display: none" for visibility, so this
+      # correctly proves the field is server-rendered hidden - no JS driver
+      # needed for this assertion.
+      expect(page).not_to have_select("Reasoning")
+    end
+
+    it "shows the Reasoning field, pre-selected, when editing a prompt that already has a value" do
+      prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "xhigh")
+
+      visit "/prompt_engine/prompts/#{prompt.id}/edit"
+
+      expect(page).to have_select("Reasoning", selected: "Xhigh")
+    end
+
+    it "server-renders exactly the model family's option list, without JS" do
+      prompt = create(:prompt, model: "gpt-5", reasoning_effort: nil)
+
+      visit "/prompt_engine/prompts/#{prompt.id}/edit"
+
+      option_texts = find_field("Reasoning").all("option").map(&:text)
+      expect(option_texts).to eq([ "Default (low)", "Minimal", "Low", "Medium", "High" ])
+    end
+  end
+
   describe "Empty state" do
     it "shows appropriate message when no prompts exist" do
       visit "/prompt_engine/prompts"

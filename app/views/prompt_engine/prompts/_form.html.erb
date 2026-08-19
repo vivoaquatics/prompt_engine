@@ -86,6 +86,21 @@
           min: 1, placeholder: "500" %>
       <div class="form__help">Maximum response length</div>
     </div>
+
+    <%
+      reasoning_values = PromptEngine::Reasoning.select_options(prompt.model)
+      reasoning_supported = reasoning_values.any?
+    %>
+    <div class="form__group" id="reasoning-effort-group"<%= " style=\"display: none;\"".html_safe unless reasoning_supported %>>
+      <%= form.label :reasoning_effort, "Reasoning", class: "form__label" %>
+      <%= form.select :reasoning_effort,
+          options_for_select(reasoning_values, prompt.reasoning_effort),
+          { include_blank: "Default (low)" },
+          class: "form__select",
+          disabled: !reasoning_supported,
+          data: { reasoning_families: PromptEngine::Reasoning.client_config.to_json } %>
+      <div class="form__help">Higher effort adds latency and reasoning tokens</div>
+    </div>
   </div>
 
   <div class="form__group">
@@ -252,6 +267,65 @@ document.addEventListener('DOMContentLoaded', function() {
   if (contentField || systemField) {
     // Detect variables on page load
     detectVariables();
+  }
+
+  // Reasoning effort: swap the available options (and show/hide the field)
+  // to match the selected model's family. form_with(model: prompt) prefixes
+  // ids with "prompt_", unlike the playground's url-form JS (which uses the
+  // unprefixed "model"/"api_key" ids) - do not copy those selectors here.
+  //
+  // The server already renders the correct state for the prompt's saved
+  // model (see _form.html.erb), since the system spec driving this form
+  // uses Capybara's rack_test driver and never executes JS. This handler
+  // only needs to cover the `change` event as progressive enhancement.
+  const modelSelect = document.getElementById('prompt_model');
+  const reasoningSelect = document.getElementById('prompt_reasoning_effort');
+  const reasoningGroup = document.getElementById('reasoning-effort-group');
+
+  if (modelSelect && reasoningSelect && reasoningGroup) {
+    const reasoningFamilies = JSON.parse(reasoningSelect.dataset.reasoningFamilies || '[]');
+
+    function reasoningFamilyForModel(modelId) {
+      return reasoningFamilies.find(function(family) {
+        // Ruby's \A/\z anchors are translated to JS equivalents, even though
+        // the shipped patterns already use ^/$ - a host app may configure \A.
+        const jsSource = family.pattern.replace(/\\A/g, '^').replace(/\\[zZ]/g, '$');
+        const regExp = new RegExp(jsSource, family.ignore_case ? 'i' : '');
+        return regExp.test(modelId);
+      });
+    }
+
+    function updateReasoningOptions() {
+      const family = reasoningFamilyForModel(modelSelect.value);
+      const previousValue = reasoningSelect.value;
+
+      if (!family) {
+        reasoningGroup.style.display = 'none';
+        reasoningSelect.disabled = true;
+        reasoningSelect.value = '';
+        return;
+      }
+
+      reasoningSelect.innerHTML = '';
+
+      const blankOption = document.createElement('option');
+      blankOption.value = '';
+      blankOption.textContent = 'Default (low)';
+      reasoningSelect.appendChild(blankOption);
+
+      family.values.forEach(function(value) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+        reasoningSelect.appendChild(option);
+      });
+
+      reasoningSelect.value = family.values.includes(previousValue) ? previousValue : '';
+      reasoningSelect.disabled = false;
+      reasoningGroup.style.display = '';
+    }
+
+    modelSelect.addEventListener('change', updateReasoningOptions);
   }
 });
 </script>

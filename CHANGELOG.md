@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Model-aware `reasoning_effort` option on prompts, versioned and forwarded to
+  `ruby_llm` at request time (defaults to `low` for reasoning-capable
+  models).
+  - **Migration required.** Adds a nullable `reasoning_effort` string column
+    to `prompt_engine_prompts`, `prompt_engine_prompt_versions`, and
+    `prompt_engine_playground_run_results`. Host apps must run
+    `bin/rails prompt_engine:install:migrations && bin/rails db:migrate`
+    after upgrading to this version. If the gem is updated before the
+    migration runs, the engine degrades gracefully (reasoning_effort reads
+    as nil / writes no-op) rather than raising across the whole prompts UI -
+    see `PromptEngine::ReasoningColumnGuard`.
 - Flexible authentication system with multiple strategies
   - HTTP Basic authentication with secure credential comparison
   - Integration with host app authentication (Devise, custom auth)

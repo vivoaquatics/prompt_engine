@@ -38,6 +38,7 @@ module PromptEngine
 
       # Create chat instance with the selected model (override or provider default)
       chat = build_chat
+      chat = apply_reasoning(chat)
 
       # Apply temperature if specified
       if prompt.temperature.present?
@@ -76,13 +77,33 @@ module PromptEngine
         execution_time: execution_time,
         token_count: token_count,
         model: selected_model,
-        provider: provider
+        provider: provider,
+        reasoning_effort: resolved_reasoning_effort
       }
     rescue => e
       handle_error(e)
     end
 
     private
+
+    # The reasoning effort actually sent with this run: the prompt's saved
+    # value if valid for the selected model, otherwise the request-time
+    # default, otherwise nil for models that support no reasoning.
+    def resolved_reasoning_effort
+      @resolved_reasoning_effort ||= PromptEngine::Reasoning.resolve(selected_model, prompt.reasoning_effort)
+    end
+
+    # Guarded by respond_to? because the gemspec places no floor on ruby_llm;
+    # a host app on an older version degrades to today's behaviour (nothing
+    # sent) instead of NoMethodError.
+    def apply_reasoning(chat)
+      return chat unless chat.respond_to?(:with_thinking)
+
+      args = PromptEngine::Reasoning.thinking_args(selected_model, prompt.reasoning_effort)
+      return chat unless args
+
+      chat.with_thinking(**args)
+    end
 
     # ruby_llm resolves model ids against its bundled registry (models.json), which
     # lags provider releases. When a configured model id is not in that registry we
