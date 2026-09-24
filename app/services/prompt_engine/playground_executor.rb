@@ -1,12 +1,26 @@
 module PromptEngine
   class PlaygroundExecutor
+    # Providers for which this engine can resolve a stored key. Enforced by
+    # validate_inputs! before any resolution happens (CVP-1822): a
+    # host-configured provider outside this list raises instead of silently
+    # resolving to nil (or, previously, to some other provider's key).
+    SETTINGS_KEY_PROVIDERS = %w[anthropic openai].freeze
+
     attr_reader :prompt, :api_key, :parameters, :model
 
-    def initialize(prompt:, api_key:, parameters: {}, model: nil)
+    def initialize(prompt:, api_key: nil, parameters: {}, model: nil)
       @prompt = prompt
-      @api_key = api_key
+      @api_key = api_key.is_a?(String) ? api_key.presence : nil
       @parameters = parameters || {}
       @model = model.presence
+    end
+
+    # Excludes resolved/submitted key material from #inspect (and anything else
+    # that walks instance_variables), mirroring RubyLLM::Chat#instance_variables
+    # and RubyLLM::Connection#instance_variables (ruby_llm gem, same rationale:
+    # never let a credential leak through a log/inspect call) (CVP-1822).
+    def instance_variables
+      super - %i[@api_key @resolved_api_key]
     end
 
     # The model that will actually be used for this run: the override if one
@@ -33,11 +47,9 @@ module PromptEngine
       parser = ParameterParser.new(prompt.content)
       processed_content = parser.replace_parameters(parameters)
 
-      # Configure RubyLLM with the appropriate API key
-      configure_ruby_llm
-
-      # Create chat instance with the selected model (override or provider default)
-      chat = RubyLLM.chat(model: selected_model)
+      # Build a request-scoped context carrying the resolved API key, then start
+      # the chat from it (never RubyLLM.chat, which uses global config).
+      chat = llm_context.chat(model: selected_model)
 
       # Apply temperature if specified
       if prompt.temperature.present?
@@ -86,19 +98,41 @@ module PromptEngine
 
     def validate_inputs!
       raise ArgumentError, "Model is required" if selected_model.blank?
-      raise ArgumentError, "API key is required" if api_key.blank?
       raise ArgumentError, "Unsupported model: #{selected_model}" if provider.blank?
+      unless SETTINGS_KEY_PROVIDERS.include?(provider)
+        raise ArgumentError, "Unsupported provider: #{provider}"
+      end
+      raise ArgumentError, "API key is required" if resolved_api_key.blank?
     end
 
-    def configure_ruby_llm
+    # Resolution order: explicit caller override, then the encrypted Setting for the
+    # inferred provider. No Rails credentials fallback (CVP-1822): a host that wants
+    # a hard-coded fallback key can still pass api_key: explicitly.
+    def resolved_api_key
+      @resolved_api_key ||= api_key.presence || settings_api_key
+    end
+
+    def settings_api_key
+      return nil unless SETTINGS_KEY_PROVIDERS.include?(provider)
+
+      # Read-only lookup (CVP-1822): unlike Setting.instance (first_or_create!),
+      # this never creates a Setting row from the playground's POST path.
+      PromptEngine::Setting.first&.public_send(:"#{provider}_api_key")&.presence
+    end
+
+    # Per-call context, not global config: RubyLLM.context dups the global config
+    # and scopes our key to this one chat, so a concurrent request (or the host
+    # app's own RubyLLM usage) can never pick up this request's key (CVP-1822).
+    def llm_context
       require "ruby_llm"
 
-      RubyLLM.configure do |config|
+      key = resolved_api_key
+      RubyLLM.context do |config|
         case provider
         when "anthropic"
-          config.anthropic_api_key = api_key
+          config.anthropic_api_key = key
         when "openai"
-          config.openai_api_key = api_key
+          config.openai_api_key = key
         end
       end
     end

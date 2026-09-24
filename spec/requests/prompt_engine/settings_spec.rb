@@ -18,17 +18,20 @@ module PromptEngine
       end
 
       context "when settings already exist with API keys" do
+        let(:seeded_openai_key) { "sk-test-openai-key" }
+        let(:seeded_anthropic_key) { "sk-ant-test-anthropic-key" }
+
         before do
           Setting.instance.update!(
-            openai_api_key: "sk-test-openai-key",
-            anthropic_api_key: "sk-ant-test-anthropic-key"
+            openai_api_key: seeded_openai_key,
+            anthropic_api_key: seeded_anthropic_key
           )
         end
 
-        it "displays masked API keys" do
+        it "does not display any portion of the stored API keys" do
           get edit_settings_path
-          expect(response.body).to include("API key is saved")
-          expect(response.body).to include("sk-...key")
+          expect(response.body).not_to include(seeded_openai_key)
+          expect(response.body).not_to include(seeded_anthropic_key)
         end
       end
     end
@@ -60,7 +63,7 @@ module PromptEngine
         end
       end
 
-      context "when clearing API keys" do
+      context "when submitting blank API keys" do
         before do
           Setting.instance.update!(
             openai_api_key: "sk-old-key",
@@ -68,7 +71,7 @@ module PromptEngine
           )
         end
 
-        it "allows clearing API keys with empty strings" do
+        it "leaves the stored keys unchanged (blank fields do not wipe existing values)" do
           patch settings_path, params: {
             setting: {
               openai_api_key: "",
@@ -77,8 +80,8 @@ module PromptEngine
           }
 
           settings = Setting.instance
-          expect(settings.openai_api_key).to be_blank
-          expect(settings.anthropic_api_key).to be_blank
+          expect(settings.openai_api_key).to eq("sk-old-key")
+          expect(settings.anthropic_api_key).to eq("sk-ant-old-key")
         end
       end
 
@@ -100,7 +103,7 @@ module PromptEngine
 
           settings = Setting.instance
           expect(settings.openai_api_key).to eq("sk-new-openai-only")
-          expect(settings.anthropic_api_key).to be_blank
+          expect(settings.anthropic_api_key).to eq("sk-ant-existing-anthropic")
         end
       end
 

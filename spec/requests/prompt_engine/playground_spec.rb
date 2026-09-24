@@ -36,6 +36,45 @@ module PromptEngine
         end
       end
 
+      context "API key exposure (CVP-1822)" do
+        before do
+          PromptEngine::Setting.instance.update!(
+            openai_api_key: "sk-test-openai-key",
+            anthropic_api_key: "sk-ant-test-anthropic-key"
+          )
+        end
+
+        it "never renders either stored provider key into the page" do
+          get playground_prompt_path(prompt)
+
+          expect(response.body).not_to include("sk-test-openai-key")
+          expect(response.body).not_to include("sk-ant-test-anthropic-key")
+        end
+
+        it "never renders a data-anthropic-key or data-openai-key attribute" do
+          get playground_prompt_path(prompt)
+
+          expect(response.body).not_to include("data-anthropic-key")
+          expect(response.body).not_to include("data-openai-key")
+        end
+
+        it "renders only the boolean configured flags" do
+          get playground_prompt_path(prompt)
+
+          expect(response.body).to include("data-anthropic-configured")
+          expect(response.body).to include("data-openai-configured")
+        end
+
+        it "never renders either key for a prompt whose model maps to the default provider" do
+          openai_prompt = create(:prompt, model: "gpt-4o", content: "Hello {{name}}")
+
+          get playground_prompt_path(openai_prompt)
+
+          expect(response.body).not_to include("sk-test-openai-key")
+          expect(response.body).not_to include("sk-ant-test-anthropic-key")
+        end
+      end
+
       context "when prompt does not exist" do
         it "raises ActiveRecord::RecordNotFound" do
           # In request specs, we don't use expect to raise_error,
@@ -71,19 +110,11 @@ module PromptEngine
         # Mock RubyLLM to avoid actual API calls
         allow_any_instance_of(PlaygroundExecutor).to receive(:require).with("ruby_llm")
 
-        # Mock the RubyLLM configuration
-        ruby_llm_mock = double("RubyLLM")
-        stub_const("RubyLLM", ruby_llm_mock)
-        config_mock = double("Config")
-        allow(config_mock).to receive(:anthropic_api_key=)
-        allow(config_mock).to receive(:openai_api_key=)
-        allow(ruby_llm_mock).to receive(:configure).and_yield(config_mock)
-
         # Mock the chat response
-        chat_mock = double("Chat")
+        chat_mock = instance_double(RUBY_LLM_CHAT_CLASS)
         response_mock = double("Response", content: "This is a test response about Ruby on Rails", input_tokens: 50, output_tokens: 100)
 
-        allow(ruby_llm_mock).to receive(:chat).and_return(chat_mock)
+        stub_ruby_llm_context!(chat_double: chat_mock)
         allow(chat_mock).to receive(:with_temperature).and_return(chat_mock)
         allow(chat_mock).to receive(:with_instructions).and_return(chat_mock)
         allow(chat_mock).to receive(:ask).and_return(response_mock)
@@ -187,7 +218,7 @@ module PromptEngine
           expect(response.body).to include("Model is required")
         end
 
-        it "handles missing API key" do
+        it "handles missing API key when no Setting is stored" do
           post playground_prompt_path(prompt), params: {
             parameters: { topic: "Rails" }
           }
@@ -205,6 +236,41 @@ module PromptEngine
 
           expect(response).to be_successful
           expect(response.body).to include("Unsupported model")
+        end
+      end
+
+      context "resolving the API key server-side from Settings (CVP-1822)" do
+        before do
+          PromptEngine::Setting.instance.update!(openai_api_key: "sk-test-openai-key")
+        end
+
+        it "succeeds without an api_key param, using the saved Setting key" do
+          post playground_prompt_path(prompt), params: {
+            parameters: { topic: "Rails", style: "casual" }
+          }
+
+          expect(response).to be_successful
+          expect(response.body).to include("AI Response")
+        end
+
+        it "treats a blank submitted api_key as 'use the saved key'" do
+          post playground_prompt_path(prompt), params: {
+            api_key: "",
+            parameters: { topic: "Rails", style: "casual" }
+          }
+
+          expect(response).to be_successful
+          expect(response.body).to include("AI Response")
+        end
+
+        it "coerces a non-String api_key (Array) to nil instead of erroring, and still uses the saved key" do
+          post playground_prompt_path(prompt), params: {
+            api_key: [ "x" ],
+            parameters: { topic: "Rails", style: "casual" }
+          }
+
+          expect(response).to be_successful
+          expect(response.body).to include("AI Response")
         end
       end
 
@@ -288,8 +354,8 @@ module PromptEngine
 
       context "with different response structures" do
         it "handles string response" do
-          chat_mock = double("Chat")
-          allow(RubyLLM).to receive(:chat).and_return(chat_mock)
+          chat_mock = instance_double(RUBY_LLM_CHAT_CLASS)
+          stub_ruby_llm_context!(chat_double: chat_mock)
           allow(chat_mock).to receive(:with_temperature).and_return(chat_mock)
           allow(chat_mock).to receive(:with_instructions).and_return(chat_mock)
           allow(chat_mock).to receive(:ask).and_return("Simple string response")
@@ -301,11 +367,11 @@ module PromptEngine
         end
 
         it "handles object without content method" do
-          chat_mock = double("Chat")
+          chat_mock = instance_double(RUBY_LLM_CHAT_CLASS)
           response_obj = double("Response")
           allow(response_obj).to receive(:to_s).and_return("Object response")
 
-          allow(RubyLLM).to receive(:chat).and_return(chat_mock)
+          stub_ruby_llm_context!(chat_double: chat_mock)
           allow(chat_mock).to receive(:with_temperature).and_return(chat_mock)
           allow(chat_mock).to receive(:with_instructions).and_return(chat_mock)
           allow(chat_mock).to receive(:ask).and_return(response_obj)
