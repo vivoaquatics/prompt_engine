@@ -282,9 +282,16 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
       end
 
       it "raises for a provider outside SETTINGS_KEY_PROVIDERS before ever touching RubyLLM" do
-        original = PromptEngine.configuration.model_provider_patterns
+        original_patterns = PromptEngine.configuration.model_provider_patterns
         PromptEngine.configuration.model_provider_patterns =
-          original.merge("cohere" => /\Acommand-/i)
+          original_patterns.merge("cohere" => /\Acommand-/i)
+
+        # The model allowlist check (CVP-1796) runs before the
+        # SETTINGS_KEY_PROVIDERS check (CVP-1822); widen the allowlist so this
+        # example reaches the provider check it means to exercise.
+        original_models = PromptEngine.configuration.options_for_model_select
+        PromptEngine.configuration.options_for_model_select =
+          original_models + [ [ "Command R Plus", "command-r-plus" ] ]
 
         class_double(RubyLLM).as_stubbed_const
         # Intentionally leave `.context` unstubbed: it must never be called.
@@ -301,7 +308,124 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
         # ever reached, RSpec would raise "received unexpected message" and
         # fail this example loudly rather than silently succeeding.
       ensure
-        PromptEngine.configuration.model_provider_patterns = original
+        PromptEngine.configuration.model_provider_patterns = original_patterns
+        PromptEngine.configuration.options_for_model_select = original_models
+      end
+
+      it "raises ArgumentError from llm_context itself for an unsupported provider, even bypassing validate_inputs!" do
+        # Pins the invariant at the method that owns it (CVP-1822 review
+        # finding): stubbing #provider directly means this reaches
+        # llm_context's own case/else without going through
+        # validate_inputs!, so a future edit to validate_inputs! alone could
+        # never silently reopen this by skipping that gate.
+        executor = described_class.new(
+          prompt: prompt,
+          api_key: "test-key",
+          parameters: valid_parameters
+        )
+        allow(executor).to receive(:require).with("ruby_llm")
+        allow(executor).to receive(:provider).and_return("cohere")
+
+        expect { executor.send(:llm_context) }.to raise_error(ArgumentError, "Unsupported provider: cohere")
+      end
+    end
+
+    context "with the configured model allowlist" do
+      let(:mock_chat) { instance_double(RubyLLM::Chat) }
+      let(:mock_response) { double("response", content: "ok") }
+
+      before do
+        stub_ruby_llm_context!(chat_double: mock_chat)
+        allow(mock_chat).to receive(:with_temperature).and_return(mock_chat)
+        allow(mock_chat).to receive(:with_instructions).and_return(mock_chat)
+        allow(mock_chat).to receive(:ask).and_return(mock_response)
+      end
+
+      it "allows a model present in PromptEngine.configuration.options_for_model_select" do
+        executor = described_class.new(
+          prompt: prompt,
+          api_key: "test-key",
+          parameters: valid_parameters,
+          model: "claude-3-5-sonnet-20241022"
+        )
+        allow(executor).to receive(:require).with("ruby_llm")
+
+        expect { executor.execute }.not_to raise_error
+      end
+
+      it "rejects a model that matches a provider pattern but is not configured" do
+        executor = described_class.new(
+          prompt: prompt,
+          api_key: "test-key",
+          parameters: valid_parameters,
+          model: "gpt-9-fake"
+        )
+
+        expect { executor.execute }.to raise_error(ArgumentError, "Unsupported model: gpt-9-fake")
+      end
+    end
+
+    context "when ruby_llm does not know the model" do
+      let(:mock_chat) { double("chat") }
+      let(:mock_response) { double("response", content: "Luna response") }
+
+      before do
+        allow(mock_chat).to receive(:with_temperature).and_return(mock_chat)
+        allow(mock_chat).to receive(:with_instructions).and_return(mock_chat)
+        allow(mock_chat).to receive(:ask).and_return(mock_response)
+      end
+
+      # A real Module (not the class_double from stub_ruby_llm_context!) so
+      # build_chat's `rescue RubyLLM::ModelNotFoundError` clause has a real
+      # constant to resolve against -- a verifying class_double carries no
+      # nested constants, which would turn a raised ModelNotFoundError into a
+      # confusing NameError instead of exercising the rescue-fallback.
+      def stub_ruby_llm_module_with_context!(&chat_behavior)
+        config = double("Config")
+        allow(config).to receive(:anthropic_api_key=)
+        allow(config).to receive(:openai_api_key=)
+
+        context_double = double("Context")
+        allow(context_double).to receive(:chat, &chat_behavior)
+
+        mock_ruby_llm = Module.new
+        mock_ruby_llm.define_singleton_method(:context) do |&block|
+          block.call(config)
+          context_double
+        end
+        mock_ruby_llm.const_set(:ModelNotFoundError, Class.new(StandardError))
+
+        stub_const("RubyLLM", mock_ruby_llm)
+        context_double
+      end
+
+      it "retries with assume_model_exists and the inferred provider after a ModelNotFoundError" do
+        call_count = 0
+        context_double = stub_ruby_llm_module_with_context! do |**_options|
+          call_count += 1
+          raise RubyLLM::ModelNotFoundError, "unknown model" if call_count == 1
+
+          mock_chat
+        end
+
+        result = executor.execute
+
+        expect(context_double).to have_received(:chat).with(model: "gpt-4o")
+        expect(context_double).to have_received(:chat).with(
+          model: "gpt-4o", provider: "openai", assume_model_exists: true
+        )
+        expect(context_double).to have_received(:chat).twice
+        expect(result[:model]).to eq("gpt-4o")
+        expect(result[:provider]).to eq("openai")
+      end
+
+      it "does not pass assume_model_exists for a registry-known model on the happy path" do
+        context_double = stub_ruby_llm_module_with_context! { mock_chat }
+
+        executor.execute
+
+        expect(context_double).to have_received(:chat).with(model: "gpt-4o")
+        expect(context_double).not_to have_received(:chat).with(hash_including(:assume_model_exists))
       end
     end
 
@@ -533,6 +657,26 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
       expect(provider_for("some-unknown-model")).to be_nil
     end
 
+    it "infers openai from GPT-5.6 Sol" do
+      expect(provider_for("gpt-5.6-sol")).to eq("openai")
+    end
+
+    it "infers openai from GPT-5.6 Terra" do
+      expect(provider_for("gpt-5.6-terra")).to eq("openai")
+    end
+
+    it "infers openai from GPT-5.6 Luna" do
+      expect(provider_for("gpt-5.6-luna")).to eq("openai")
+    end
+
+    it "infers anthropic from Claude Opus 5" do
+      expect(provider_for("claude-opus-5")).to eq("anthropic")
+    end
+
+    it "infers anthropic from Claude Sonnet 5" do
+      expect(provider_for("claude-sonnet-5")).to eq("anthropic")
+    end
+
     it "honors custom configured patterns" do
       original = PromptEngine.configuration.model_provider_patterns
       PromptEngine.configuration.model_provider_patterns =
@@ -541,6 +685,174 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
       expect(provider_for("my-llm-7b")).to eq("openai")
     ensure
       PromptEngine.configuration.model_provider_patterns = original
+    end
+  end
+
+  describe "#execute applying reasoning" do
+    # The default PromptEngine.configuration.options_for_model_select does
+    # not ship any vivopoint model ids (CVP-1796 precedent - capability
+    # patterns are a gem default, ids are not), and validate_inputs! rejects
+    # any model not in that allowlist. Temporarily widen it for this describe
+    # block only, mirroring the existing "#provider honors custom configured
+    # patterns" save/restore idiom above.
+    around do |example|
+      original = PromptEngine.configuration.options_for_model_select
+      PromptEngine.configuration.options_for_model_select =
+        original + [ [ "GPT-5.6 Sol", "gpt-5.6-sol" ], [ "Claude Haiku 4.5", "claude-haiku-4-5" ] ]
+      example.run
+      PromptEngine.configuration.options_for_model_select = original
+    end
+
+    let(:mock_response) { double("response", content: "ok") }
+    let(:mock_chat) { double("chat") }
+
+    # Default: the outer `prompt` (model "gpt-4o", non-reasoning). Contexts
+    # below that need a reasoning-capable model override both `executor` and
+    # `reasoning_prompt`.
+    let(:executor) do
+      described_class.new(prompt: prompt, api_key: "test-key", parameters: valid_parameters)
+    end
+
+    before do
+      allow(executor).to receive(:require).with("ruby_llm")
+
+      config = double("Config")
+      allow(config).to receive(:anthropic_api_key=)
+      allow(config).to receive(:openai_api_key=)
+
+      context_double = double("Context")
+      allow(context_double).to receive(:chat).and_return(mock_chat)
+
+      # A real Module (not class_double(RubyLLM)), matching the pattern used by
+      # "when ruby_llm does not know the model" above: RubyLLM::ModelNotFoundError
+      # needs a real constant to resolve against.
+      #
+      # IMPORTANT: this module must define `:context` explicitly. A bare
+      # Module.new otherwise responds to `.context` via RSpec's own
+      # Module#context DSL alias, which would silently define a nested (never
+      # run) example group instead of exercising llm_context (see
+      # spec/support/ruby_llm_stub_helper.rb).
+      mock_ruby_llm = Module.new
+      mock_ruby_llm.define_singleton_method(:context) do |&block|
+        block.call(config)
+        context_double
+      end
+      mock_ruby_llm.const_set(:ModelNotFoundError, Class.new(StandardError))
+      stub_const("RubyLLM", mock_ruby_llm)
+
+      allow(mock_chat).to receive(:with_temperature).and_return(mock_chat)
+      allow(mock_chat).to receive(:with_instructions).and_return(mock_chat)
+      allow(mock_chat).to receive(:ask).and_return(mock_response)
+    end
+
+    context "with an effort-mode reasoning model" do
+      let(:reasoning_prompt) do
+        FactoryBot.create(:prompt,
+          content: "Tell me about {{topic}} in {{style}} style",
+          model: "gpt-5.6-sol",
+          reasoning_effort: "high"
+        )
+      end
+
+      let(:executor) do
+        described_class.new(prompt: reasoning_prompt, api_key: "test-key", parameters: valid_parameters)
+      end
+
+      it "calls with_thinking with the prompt's stored effort" do
+        allow(mock_chat).to receive(:with_thinking).with(effort: "high").and_return(mock_chat)
+
+        executor.execute
+
+        expect(mock_chat).to have_received(:with_thinking).with(effort: "high")
+      end
+
+      it "returns the resolved reasoning_effort in the result hash" do
+        allow(mock_chat).to receive(:with_thinking).and_return(mock_chat)
+
+        result = executor.execute
+
+        expect(result[:reasoning_effort]).to eq("high")
+      end
+    end
+
+    context "when no reasoning_effort is stored (request-time default)" do
+      let(:reasoning_prompt) do
+        FactoryBot.create(:prompt,
+          content: "Tell me about {{topic}} in {{style}} style",
+          model: "gpt-5.6-sol",
+          reasoning_effort: nil
+        )
+      end
+
+      let(:executor) do
+        described_class.new(prompt: reasoning_prompt, api_key: "test-key", parameters: valid_parameters)
+      end
+
+      it "defaults to low - a value is always sent for a reasoning-capable model" do
+        allow(mock_chat).to receive(:with_thinking).with(effort: "low").and_return(mock_chat)
+
+        executor.execute
+
+        expect(mock_chat).to have_received(:with_thinking).with(effort: "low")
+      end
+    end
+
+    context "with a budget-mode reasoning model" do
+      let(:reasoning_prompt) do
+        FactoryBot.create(:prompt,
+          content: "Tell me about {{topic}} in {{style}} style",
+          model: "claude-haiku-4-5",
+          reasoning_effort: "medium"
+        )
+      end
+
+      let(:executor) do
+        described_class.new(prompt: reasoning_prompt, api_key: "anthropic-key", parameters: valid_parameters)
+      end
+
+      it "calls with_thinking with the token budget, not the named level" do
+        allow(mock_chat).to receive(:with_thinking).with(budget: 8192).and_return(mock_chat)
+
+        executor.execute
+
+        expect(mock_chat).to have_received(:with_thinking).with(budget: 8192)
+      end
+    end
+
+    context "with a non-reasoning model" do
+      it "never calls with_thinking" do
+        expect(mock_chat).not_to receive(:with_thinking)
+
+        executor.execute
+      end
+
+      it "returns nil for reasoning_effort in the result hash" do
+        result = executor.execute
+
+        expect(result[:reasoning_effort]).to be_nil
+      end
+    end
+
+    context "when the chat object does not support with_thinking (older ruby_llm)" do
+      let(:reasoning_prompt) do
+        FactoryBot.create(:prompt,
+          content: "Tell me about {{topic}} in {{style}} style",
+          model: "gpt-5.6-sol",
+          reasoning_effort: "high"
+        )
+      end
+
+      let(:executor) do
+        described_class.new(prompt: reasoning_prompt, api_key: "test-key", parameters: valid_parameters)
+      end
+
+      it "executes successfully without sending reasoning" do
+        # mock_chat is a bare double here - with_thinking was never stubbed,
+        # so respond_to?(:with_thinking) is false, exercising the guard.
+        result = executor.execute
+
+        expect(result[:response]).to eq("ok")
+      end
     end
   end
 

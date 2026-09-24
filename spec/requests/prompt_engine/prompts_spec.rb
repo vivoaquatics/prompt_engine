@@ -120,6 +120,48 @@ module PromptEngine
       end
     end
 
+    describe "POST /prompt_engine/prompts with reasoning_effort" do
+      let(:reasoning_attributes) do
+        valid_attributes.merge(model: "gpt-5.6-sol", reasoning_effort: "high")
+      end
+
+      it "persists a reasoning_effort valid for the chosen model" do
+        post prompt_engine.prompts_path, params: { prompt: reasoning_attributes }
+
+        expect(PromptEngine::Prompt.last.reasoning_effort).to eq("high")
+      end
+
+      context "when reasoning_effort is invalid for the chosen model" do
+        let(:invalid_reasoning_attributes) do
+          valid_attributes.merge(model: "gpt-5", reasoning_effort: "xhigh")
+        end
+
+        it "does not create the prompt" do
+          expect {
+            post prompt_engine.prompts_path, params: { prompt: invalid_reasoning_attributes }
+          }.not_to change(PromptEngine::Prompt, :count)
+        end
+
+        it "renders :new with unprocessable_content, not a silently-cleared value" do
+          post prompt_engine.prompts_path, params: { prompt: invalid_reasoning_attributes }
+
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(response.body).to include("is not available for this model")
+        end
+      end
+
+      it "drops an unpermitted sibling key while still persisting reasoning_effort" do
+        # If `admin` were NOT dropped by strong params, mass assignment would
+        # raise ActiveModel::UnknownAttributeError (Prompt has no `admin`
+        # column/setter) and this request would 500 instead of redirecting.
+        post prompt_engine.prompts_path,
+          params: { prompt: reasoning_attributes.merge(admin: true) }
+
+        expect(response).to redirect_to(prompt_engine.prompt_path(PromptEngine::Prompt.last))
+        expect(PromptEngine::Prompt.last.reasoning_effort).to eq("high")
+      end
+    end
+
     describe "PATCH /prompt_engine/prompts/:id" do
       let(:prompt) { create(:prompt) }
 
@@ -138,6 +180,23 @@ module PromptEngine
           expect(prompt.name).to eq("Updated Prompt Name")
           expect(prompt.description).to eq("Updated description")
           expect(prompt.temperature).to eq(0.9)
+        end
+
+        it "updates reasoning_effort" do
+          reasoning_prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "low")
+
+          patch prompt_engine.prompt_path(reasoning_prompt), params: { prompt: { reasoning_effort: "xhigh" } }
+
+          expect(reasoning_prompt.reload.reasoning_effort).to eq("xhigh")
+        end
+
+        it "rejects a reasoning_effort invalid for the current model without changing anything" do
+          reasoning_prompt = create(:prompt, model: "gpt-5", reasoning_effort: "low")
+
+          patch prompt_engine.prompt_path(reasoning_prompt), params: { prompt: { reasoning_effort: "xhigh" } }
+
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(reasoning_prompt.reload.reasoning_effort).to eq("low")
         end
 
         it "redirects to the prompt" do
@@ -195,6 +254,14 @@ module PromptEngine
         it "redirects to the prompt" do
           put prompt_engine.prompt_path(prompt), params: { prompt: new_attributes }
           expect(response).to redirect_to(prompt_engine.prompt_path(prompt))
+        end
+
+        it "updates reasoning_effort" do
+          reasoning_prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "low")
+
+          put prompt_engine.prompt_path(reasoning_prompt), params: { prompt: { reasoning_effort: "xhigh" } }
+
+          expect(reasoning_prompt.reload.reasoning_effort).to eq("xhigh")
         end
 
         it "sets a success notice" do

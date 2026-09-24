@@ -48,8 +48,9 @@ module PromptEngine
       processed_content = parser.replace_parameters(parameters)
 
       # Build a request-scoped context carrying the resolved API key, then start
-      # the chat from it (never RubyLLM.chat, which uses global config).
-      chat = llm_context.chat(model: selected_model)
+      # the chat from it (never RubyLLM.chat, which uses global config) (CVP-1822).
+      chat = build_chat
+      chat = apply_reasoning(chat)
 
       # Apply temperature if specified
       if prompt.temperature.present?
@@ -88,7 +89,8 @@ module PromptEngine
         execution_time: execution_time,
         token_count: token_count,
         model: selected_model,
-        provider: provider
+        provider: provider,
+        reasoning_effort: resolved_reasoning_effort
       }
     rescue => e
       handle_error(e)
@@ -96,12 +98,51 @@ module PromptEngine
 
     private
 
+    # The reasoning effort actually sent with this run: the prompt's saved
+    # value if valid for the selected model, otherwise the request-time
+    # default, otherwise nil for models that support no reasoning.
+    def resolved_reasoning_effort
+      @resolved_reasoning_effort ||= PromptEngine::Reasoning.resolve(selected_model, prompt.reasoning_effort)
+    end
+
+    # Guarded by respond_to? because the gemspec places no floor on ruby_llm;
+    # a host app on an older version degrades to today's behaviour (nothing
+    # sent) instead of NoMethodError.
+    def apply_reasoning(chat)
+      return chat unless chat.respond_to?(:with_thinking)
+
+      args = PromptEngine::Reasoning.thinking_args(selected_model, prompt.reasoning_effort)
+      return chat unless args
+
+      chat.with_thinking(**args)
+    end
+
+    # ruby_llm resolves model ids against its bundled registry (models.json), which
+    # lags provider releases. When a configured model id is not in that registry we
+    # retry with assume_model_exists:, passing the provider we already inferred from
+    # PromptEngine.configuration.model_provider_patterns. Known models keep their
+    # full registry metadata; only unknown ids take the assumed path. Built from a
+    # request-scoped RubyLLM::Context, never RubyLLM.chat/RubyLLM.configure directly,
+    # so this request's key never touches global config (CVP-1822).
+    def build_chat
+      llm_context.chat(model: selected_model)
+    rescue RubyLLM::ModelNotFoundError
+      llm_context.chat(model: selected_model, provider: provider, assume_model_exists: true)
+    end
+
     def validate_inputs!
       raise ArgumentError, "Model is required" if selected_model.blank?
       raise ArgumentError, "Unsupported model: #{selected_model}" if provider.blank?
+
+      allowed_models = PromptEngine.configuration.options_for_model_select.map(&:last)
+      unless allowed_models.include?(selected_model)
+        raise ArgumentError, "Unsupported model: #{selected_model}"
+      end
+
       unless SETTINGS_KEY_PROVIDERS.include?(provider)
         raise ArgumentError, "Unsupported provider: #{provider}"
       end
+
       raise ArgumentError, "API key is required" if resolved_api_key.blank?
     end
 
@@ -133,6 +174,8 @@ module PromptEngine
           config.anthropic_api_key = key
         when "openai"
           config.openai_api_key = key
+        else
+          raise ArgumentError, "Unsupported provider: #{provider}"
         end
       end
     end

@@ -116,6 +116,32 @@ module PromptEngine
           expect(response.body).to include("Version 1 content")
           expect(response.body).to include("Version 2 content")
         end
+
+        it "surfaces a Reasoning diff row when reasoning_effort differs between the compared versions" do
+          reasoning_prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "low")
+          version_a = reasoning_prompt.versions.first
+          reasoning_prompt.update!(reasoning_effort: "xhigh")
+          version_b = reasoning_prompt.versions.latest.first
+
+          get prompt_engine.compare_prompt_version_path(reasoning_prompt, version_b,
+            version_a_id: version_a.id,
+            version_b_id: version_b.id)
+
+          expect(response.body).to include("Reasoning")
+        end
+
+        it "does not surface a Reasoning diff row when reasoning_effort is unchanged" do
+          reasoning_prompt = create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "low")
+          version_a = reasoning_prompt.versions.first
+          reasoning_prompt.update!(content: "Some other change")
+          version_b = reasoning_prompt.versions.latest.first
+
+          get prompt_engine.compare_prompt_version_path(reasoning_prompt, version_b,
+            version_a_id: version_a.id,
+            version_b_id: version_b.id)
+
+          expect(response.body).not_to include("Reasoning")
+        end
       end
 
       context "with only id parameter (compare with previous)" do
@@ -230,6 +256,38 @@ module PromptEngine
         it "returns not found" do
           post prompt_engine.restore_prompt_version_path(prompt, id: 99999)
           expect(response).to have_http_status(:not_found)
+        end
+      end
+
+      context "with reasoning_effort" do
+        let(:reasoning_prompt) { create(:prompt, model: "gpt-5.6-sol", reasoning_effort: "high") }
+        let!(:reasoning_version) { reasoning_prompt.versions.first }
+
+        it "restores reasoning_effort along with the other attributes" do
+          reasoning_prompt.update!(reasoning_effort: nil)
+
+          post prompt_engine.restore_prompt_version_path(reasoning_prompt, reasoning_version)
+
+          expect(reasoning_prompt.reload.reasoning_effort).to eq("high")
+        end
+
+        it "labels the new version 'Restored from version N', not 'Updated: ...'" do
+          reasoning_prompt.update!(reasoning_effort: nil)
+
+          post prompt_engine.restore_prompt_version_path(reasoning_prompt, reasoning_version)
+
+          latest = reasoning_prompt.reload.versions.latest.first
+          expect(latest.change_description).to eq("Restored from version #{reasoning_version.version_number}")
+        end
+
+        it "sanitizes a reasoning_effort no longer valid for the version's own stored model instead of rejecting the restore" do
+          reasoning_version.update_column(:reasoning_effort, "not-a-real-value")
+          reasoning_prompt.update!(content: "Different content")
+
+          post prompt_engine.restore_prompt_version_path(reasoning_prompt, reasoning_version)
+
+          expect(response).to redirect_to(prompt_engine.prompt_path(reasoning_prompt))
+          expect(reasoning_prompt.reload.reasoning_effort).to be_nil
         end
       end
     end

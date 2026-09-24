@@ -104,6 +104,73 @@ module PromptEngine
       end
     end
 
+    describe "#reasoning_effort" do
+      it "returns nil for a model that supports no reasoning" do
+        data = rendered_data.merge(model: "gpt-4", reasoning_effort: nil)
+        prompt_no_reasoning = described_class.new(prompt, data, {})
+
+        expect(prompt_no_reasoning.reasoning_effort).to be_nil
+      end
+
+      it "defaults to low at request time when the model supports reasoning but nothing is stored" do
+        data = rendered_data.merge(model: "gpt-5.6-sol", reasoning_effort: nil)
+        prompt_with_reasoning = described_class.new(prompt, data, {})
+
+        expect(prompt_with_reasoning.reasoning_effort).to eq("low")
+      end
+
+      it "passes through a stored value that is valid for the model" do
+        data = rendered_data.merge(model: "gpt-5.6-sol", reasoning_effort: "xhigh")
+        prompt_with_reasoning = described_class.new(prompt, data, {})
+
+        expect(prompt_with_reasoning.reasoning_effort).to eq("xhigh")
+      end
+
+      it "prefers an override over the stored value" do
+        data = rendered_data.merge(model: "gpt-5.6-sol", reasoning_effort: "low")
+        prompt_with_override = described_class.new(prompt, data, { reasoning_effort: "max" })
+
+        expect(prompt_with_override.reasoning_effort).to eq("max")
+      end
+
+      it "resolves against an overridden model, not the rendered data's model" do
+        data = rendered_data.merge(model: "gpt-4", reasoning_effort: nil)
+        prompt_with_model_override = described_class.new(prompt, data, { model: "gpt-5.6-sol" })
+
+        expect(prompt_with_model_override.reasoning_effort).to eq("low")
+      end
+
+      it "returns nil for a budget-mode Anthropic model - that value is a token count, not this string" do
+        data = rendered_data.merge(model: "claude-haiku-4-5", reasoning_effort: "medium")
+        prompt_budget_mode = described_class.new(prompt, data, {})
+
+        expect(prompt_budget_mode.reasoning_effort).to be_nil
+      end
+    end
+
+    describe "#reasoning_thinking_args" do
+      it "returns an effort hash for an effort-mode Anthropic model" do
+        data = rendered_data.merge(model: "claude-opus-4-8", reasoning_effort: "xhigh")
+        rp = described_class.new(prompt, data, {})
+
+        expect(rp.reasoning_thinking_args).to eq({ effort: "xhigh" })
+      end
+
+      it "returns a budget hash (token count) for a budget-mode Anthropic model" do
+        data = rendered_data.merge(model: "claude-haiku-4-5", reasoning_effort: "medium")
+        rp = described_class.new(prompt, data, {})
+
+        expect(rp.reasoning_thinking_args).to eq({ budget: 8192 })
+      end
+
+      it "returns nil for a non-reasoning model" do
+        data = rendered_data.merge(model: "gpt-4", reasoning_effort: nil)
+        rp = described_class.new(prompt, data, {})
+
+        expect(rp.reasoning_thinking_args).to be_nil
+      end
+    end
+
     describe "#system_message" do
       it "returns overridden system_message when provided" do
         with_system = described_class.new(prompt, rendered_data, { system_message: "New system message" })
@@ -129,6 +196,14 @@ module PromptEngine
           options: overrides,
           parameters: { "name" => "Alice" }
         )
+      end
+
+      it "never includes reasoning_effort, for effort-mode or budget-mode Anthropic families" do
+        effort_data = rendered_data.merge(model: "claude-opus-4-8", reasoning_effort: "high")
+        budget_data = rendered_data.merge(model: "claude-haiku-4-5", reasoning_effort: "medium")
+
+        expect(described_class.new(prompt, effort_data).to_h).not_to have_key(:reasoning_effort)
+        expect(described_class.new(prompt, budget_data).to_h).not_to have_key(:reasoning_effort)
       end
     end
 
@@ -390,6 +465,27 @@ module PromptEngine
           })
         end
       end
+
+      context "with a reasoning-capable OpenAI model" do
+        let(:reasoning_rendered_data) do
+          {
+            content: "Test prompt",
+            system_message: "You are helpful",
+            model: "gpt-5.6-sol",
+            temperature: 0.7,
+            max_tokens: 1000,
+            reasoning_effort: "xhigh",
+            parameters_used: {},
+            version_number: 1
+          }
+        end
+
+        it "includes reasoning_effort as a genuine OpenAI wire parameter" do
+          prompt_reasoning = described_class.new(prompt, reasoning_rendered_data)
+
+          expect(prompt_reasoning.to_openai_params[:reasoning_effort]).to eq("xhigh")
+        end
+      end
     end
 
     describe "#to_ruby_llm_params" do
@@ -579,6 +675,63 @@ module PromptEngine
           expect(params[:messages].first).to have_key(:content)
         end
       end
+
+      # THE key regression-pinning area (CVP-1797): reasoning_effort is an
+      # OpenAI-only wire parameter. ruby_llm's Anthropic provider never
+      # accepts a top-level reasoning_effort: key - the real channel is
+      # with_thinking (reasoning_thinking_args), driven separately by
+      # execute_with. This regressed twice across code review: once by
+      # leaking it unconditionally, once more narrowly for effort-mode
+      # Anthropic families specifically (budget-mode alone was fixed first).
+      context "with a reasoning-capable Anthropic model (regression guard)" do
+        it "never includes reasoning_effort for an effort-mode family (e.g. claude-opus-4-8)" do
+          data = {
+            content: "Test prompt",
+            system_message: "You are helpful",
+            model: "claude-opus-4-8",
+            temperature: 0.7,
+            max_tokens: 1000,
+            reasoning_effort: "high",
+            parameters_used: {},
+            version_number: 1
+          }
+          rp = described_class.new(prompt, data)
+
+          expect(rp.to_ruby_llm_params).not_to have_key(:reasoning_effort)
+        end
+
+        it "never includes reasoning_effort for a budget-mode family (e.g. claude-haiku-4-5)" do
+          data = {
+            content: "Test prompt",
+            system_message: "You are helpful",
+            model: "claude-haiku-4-5",
+            temperature: 0.7,
+            max_tokens: 1000,
+            reasoning_effort: "medium",
+            parameters_used: {},
+            version_number: 1
+          }
+          rp = described_class.new(prompt, data)
+
+          expect(rp.to_ruby_llm_params).not_to have_key(:reasoning_effort)
+        end
+
+        it "does not include the non-wire-parameter reasoning_thinking_args key either" do
+          data = {
+            content: "Test prompt",
+            system_message: "You are helpful",
+            model: "claude-opus-4-8",
+            temperature: 0.7,
+            max_tokens: 1000,
+            reasoning_effort: "high",
+            parameters_used: {},
+            version_number: 1
+          }
+          rp = described_class.new(prompt, data)
+
+          expect(rp.to_ruby_llm_params).not_to have_key(:reasoning_thinking_args)
+        end
+      end
     end
 
     describe "#execute_with" do
@@ -713,6 +866,47 @@ module PromptEngine
             expect(client).to receive(:chat).with(anything)
             rendered_prompt.execute_with(client)
           end
+        end
+      end
+
+      context "dispatch to with_thinking for reasoning-capable models" do
+        let(:ruby_llm_client) do
+          client_class = double("Class", name: "RubyLLM::Provider")
+          double("RubyLLM::Provider", class: client_class)
+        end
+
+        it "sends chat through the object returned by with_thinking for an effort-mode model" do
+          data = test_rendered_data.merge(model: "claude-opus-4-8", reasoning_effort: "xhigh")
+          rp = described_class.new(prompt, data)
+
+          thinking_target = double("thinking-target")
+          allow(ruby_llm_client).to receive(:with_thinking).with(effort: "xhigh").and_return(thinking_target)
+          expect(thinking_target).to receive(:chat)
+          expect(ruby_llm_client).not_to receive(:chat)
+
+          rp.execute_with(ruby_llm_client)
+        end
+
+        it "sends chat through the object returned by with_thinking for a budget-mode model" do
+          data = test_rendered_data.merge(model: "claude-haiku-4-5", reasoning_effort: "medium")
+          rp = described_class.new(prompt, data)
+
+          thinking_target = double("thinking-target")
+          allow(ruby_llm_client).to receive(:with_thinking).with(budget: 8192).and_return(thinking_target)
+          expect(thinking_target).to receive(:chat)
+          expect(ruby_llm_client).not_to receive(:chat)
+
+          rp.execute_with(ruby_llm_client)
+        end
+
+        it "calls chat directly on the client for a non-reasoning model, without calling with_thinking" do
+          data = test_rendered_data.merge(model: "gpt-4", reasoning_effort: nil)
+          rp = described_class.new(prompt, data)
+
+          expect(ruby_llm_client).not_to receive(:with_thinking)
+          expect(ruby_llm_client).to receive(:chat)
+
+          rp.execute_with(ruby_llm_client)
         end
       end
 

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Model-aware `reasoning_effort` option on prompts, versioned and forwarded to
+  `ruby_llm` at request time (defaults to `low` for reasoning-capable
+  models).
+  - **Migration required.** Adds a nullable `reasoning_effort` string column
+    to `prompt_engine_prompts`, `prompt_engine_prompt_versions`, and
+    `prompt_engine_playground_run_results`. Host apps must run
+    `bin/rails prompt_engine:install:migrations && bin/rails db:migrate`
+    after upgrading to this version. If the gem is updated before the
+    migration runs, the engine degrades gracefully (reasoning_effort reads
+    as nil / writes no-op) rather than raising across the whole prompts UI -
+    see `PromptEngine::ReasoningColumnGuard`.
+- Flexible authentication system with multiple strategies
+  - HTTP Basic authentication with secure credential comparison
+  - Integration with host app authentication (Devise, custom auth)
+  - ActiveSupport hooks for custom authentication logic
+  - Rack middleware support for advanced scenarios
+- Configuration API for authentication settings
+  - `PromptEngine.configure` block for easy setup
+  - Environment-specific authentication configuration
+  - Ability to disable authentication for development
+- Comprehensive authentication documentation
+  - Detailed setup guide in README
+  - Dedicated AUTHENTICATION.md with examples and best practices
+  - Security recommendations and troubleshooting tips
+- Authentication test suite with full coverage
+
 ### Removed
 - **BREAKING:** `PromptEngine::Setting#masked_openai_api_key`, `#masked_anthropic_api_key`, and
   the private `#mask_api_key` have been removed. They rendered a prefix and suffix of a live API
@@ -17,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   MAJOR-version-worthy breaking change under the SemVer policy declared above.
 
 ### Security
+- Uses `ActiveSupport::SecurityUtils.secure_compare` to prevent timing attacks
+- Credentials are never logged or exposed in error messages
+- Authentication is enabled by default (must be explicitly disabled)
 - Playground no longer renders stored OpenAI/Anthropic API keys into the page HTML (form
   field values and `data-` attributes). Keys are resolved server-side from
   `PromptEngine::Setting` based on the provider inferred from the selected model.

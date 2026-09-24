@@ -134,6 +134,14 @@ module PromptEngine
         expect(version.reload.max_tokens).to eq(original_tokens)
       end
 
+      it 'prevents updating reasoning_effort after creation' do
+        original_reasoning_effort = version.reasoning_effort
+        version.reasoning_effort = 'high'
+        expect(version.save).to be false
+        expect(version.errors[:reasoning_effort]).to include('cannot be changed after creation')
+        expect(version.reload.reasoning_effort).to eq(original_reasoning_effort)
+      end
+
       it 'allows updating change_description' do
         version.change_description = 'Updated description'
         expect(version.save).to be true
@@ -227,6 +235,75 @@ module PromptEngine
         expect(new_version.content).to eq('Old content')
         expect(new_version.change_description).to include('Restored from version')
       end
+
+      context 'when the version has a reasoning_effort valid for its own model' do
+        let(:prompt) do
+          create(:prompt,
+            content: 'Old content',
+            model: 'gpt-5.6-sol',
+            reasoning_effort: 'xhigh'
+          )
+        end
+
+        it 'restores reasoning_effort along with the other attributes' do
+          prompt.update!(content: 'Different content', reasoning_effort: nil)
+          expect(prompt.reasoning_effort).to be_nil
+
+          old_version.restore!
+          prompt.reload
+
+          expect(prompt.content).to eq('Old content')
+          expect(prompt.model).to eq('gpt-5.6-sol')
+          expect(prompt.reasoning_effort).to eq('xhigh')
+        end
+      end
+
+      context 'when the version has a reasoning_effort no longer valid for its stored model' do
+        let(:prompt) do
+          create(:prompt,
+            content: 'Old content',
+            model: 'gpt-5.6-sol',
+            reasoning_effort: 'xhigh'
+          )
+        end
+
+        it 'sanitizes the invalid value to nil instead of raising' do
+          # Simulate a legacy/corrupt version row whose reasoning_effort is no
+          # longer valid for the model it was captured against - bypass
+          # normal validation the same way a config change removing a value
+          # from model_reasoning_options would leave a stale row behind.
+          old_version.update_column(:reasoning_effort, 'not-a-real-value')
+
+          prompt.update!(content: 'Different content')
+
+          expect { old_version.restore! }.not_to raise_error
+
+          prompt.reload
+          expect(prompt.content).to eq('Old content')
+          expect(prompt.model).to eq('gpt-5.6-sol')
+          expect(prompt.reasoning_effort).to be_nil
+        end
+      end
+
+      context 'when the live prompt has since moved to a different model entirely' do
+        let(:prompt) do
+          create(:prompt, content: 'Old content', model: 'gpt-5.6-sol', reasoning_effort: 'xhigh')
+        end
+
+        it 'restores both the version\'s own model and reasoning_effort, ignoring the live prompt\'s current model' do
+          # The live prompt has since moved to a non-reasoning model - restore
+          # should bring back the version's own (self-consistent) model +
+          # reasoning_effort pairing, not be influenced by what the prompt
+          # currently holds.
+          prompt.update!(model: 'gpt-4o', reasoning_effort: nil)
+
+          old_version.restore!
+          prompt.reload
+
+          expect(prompt.model).to eq('gpt-5.6-sol')
+          expect(prompt.reasoning_effort).to eq('xhigh')
+        end
+      end
     end
 
     describe '#to_prompt_attributes' do
@@ -239,6 +316,7 @@ module PromptEngine
           model: 'gpt-4',
           temperature: 0.7,
           max_tokens: 1000,
+          reasoning_effort: nil,
           metadata: { 'foo' => 'bar' }
         )
       end
@@ -252,8 +330,27 @@ module PromptEngine
           model: 'gpt-4',
           temperature: 0.7,
           max_tokens: 1000,
+          reasoning_effort: nil,
           metadata: { 'foo' => 'bar' }
         })
+      end
+
+      context 'when the version has a reasoning_effort' do
+        let(:version) do
+          prompt.versions.create!(
+            content: 'Version content',
+            system_message: 'Version message',
+            model: 'gpt-5.6-sol',
+            temperature: 0.7,
+            max_tokens: 1000,
+            reasoning_effort: 'high',
+            metadata: {}
+          )
+        end
+
+        it 'includes it in the returned hash' do
+          expect(version.to_prompt_attributes[:reasoning_effort]).to eq('high')
+        end
       end
     end
   end

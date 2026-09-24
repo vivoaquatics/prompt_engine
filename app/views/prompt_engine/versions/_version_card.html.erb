@@ -45,6 +45,11 @@
       <span class="version-card__metadata-label">Max Tokens</span>
       <span class="version-card__metadata-value"><%= version.max_tokens || "Default" %></span>
     </div>
+
+    <div class="version-card__metadata-item">
+      <span class="version-card__metadata-label">Reasoning</span>
+      <span class="version-card__metadata-value"><%= version.reasoning_effort || "Default" %></span>
+    </div>
   </div>
   
   <% if show_preview && version.content.present? %>

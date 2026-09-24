@@ -39,6 +39,20 @@ require "capybara/cuprite"
 
 # Load support files
 ENGINE_ROOT = File.join(File.dirname(__FILE__), "../")
+
+# factory_bot_rails' Railtie derives FactoryBot.definition_file_paths from
+# Rails.root (spec/dummy/config/application.rb) - but for an engine, the
+# dummy app's Rails.root is spec/dummy, NOT this engine's own root, so the
+# Railtie ends up pointing FactoryBot at the nonexistent
+# spec/dummy/spec/factories instead of this engine's real spec/factories.
+# The effect: every create(:prompt)/build(:prompt_version)/etc. call in any
+# spec raises `KeyError: Factory not registered`, regardless of require
+# order. Point FactoryBot at this engine's actual factories directory
+# directly rather than relying on the Railtie's Rails.root-relative
+# discovery, then (re)load definitions from there.
+FactoryBot.definition_file_paths = [ File.join(ENGINE_ROOT, "spec/factories") ]
+FactoryBot.reload
+
 Dir[File.join(ENGINE_ROOT, "spec/support/**/*.rb")].sort.each { |f| require f }
 
 # Requires supporting ruby files with custom matchers and macros, etc, in

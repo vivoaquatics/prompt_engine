@@ -20,15 +20,12 @@ module PromptEngine
     end
 
     def restore
-      ActiveRecord::Base.transaction do
-        @prompt.update!(
-          content: @version.content,
-          system_message: @version.system_message,
-          model: @version.model,
-          temperature: @version.temperature,
-          max_tokens: @version.max_tokens
-        )
-      end
+      # Delegate to the model's own restore! (rather than duplicating its
+      # update!/attribute-hash logic here): it already sanitizes an
+      # invalid-for-its-model reasoning_effort so the restore can never be
+      # vetoed by the inclusion validator, and it correctly stamps the
+      # resulting version's change_description as "Restored from version N".
+      @version.restore!
       redirect_to @prompt, notice: "Prompt restored to version #{@version.version_number}"
     rescue => e
       redirect_to prompt_versions_path(@prompt), alert: "Failed to restore version: #{e.message}"
@@ -81,6 +78,11 @@ module PromptEngine
           old: version_a.max_tokens,
           new: version_b.max_tokens,
           changed: version_a.max_tokens != version_b.max_tokens
+        },
+        reasoning_effort: {
+          old: version_a.reasoning_effort,
+          new: version_b.reasoning_effort,
+          changed: version_a.reasoning_effort != version_b.reasoning_effort
         }
       }
     end
