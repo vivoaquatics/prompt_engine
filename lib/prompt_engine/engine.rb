@@ -36,6 +36,15 @@ module PromptEngine
       end
     end
 
+    # Defense in depth: the playground still accepts an optional api_key param for
+    # hosts that have not stored one. This guard only protects hosts that append to
+    # the default filter list; a host that fully *replaces* config.filter_parameters
+    # (e.g. `config.filter_parameters = [:only_this]`) after this initializer runs
+    # will still not redact :api_key.
+    initializer "prompt_engine.filter_parameters" do |app|
+      app.config.filter_parameters << :api_key unless app.config.filter_parameters.include?(:api_key)
+    end
+
     # Allow middleware to be added for authentication
     # Example: PromptEngine::Engine.middleware.use(Rack::Auth::Basic) { ... }
   end

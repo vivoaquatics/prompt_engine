@@ -18,10 +18,10 @@
           <%= form.label :openai_api_key, "OpenAI API Key", class: "form__label" %>
           <%= form.password_field :openai_api_key, 
               class: "form__input", 
-              placeholder: @settings.openai_configured? ? "API key is saved (#{@settings.masked_openai_api_key})" : "Enter your OpenAI API key",
-              autocomplete: "off" %>
+              placeholder: @settings.openai_configured? ? "API key is saved" : "Enter your OpenAI API key",
+              autocomplete: "new-password" %>
           <div class="form__help">
-            Your API key will be encrypted and stored securely. 
+            Your API key will be encrypted and stored securely.
             <%= link_to "Get your API key from OpenAI", "https://platform.openai.com/api-keys", target: "_blank", class: "link" %>
           </div>
         </div>
@@ -34,10 +34,10 @@
           <%= form.label :anthropic_api_key, "Anthropic API Key", class: "form__label" %>
           <%= form.password_field :anthropic_api_key, 
               class: "form__input", 
-              placeholder: @settings.anthropic_configured? ? "API key is saved (#{@settings.masked_anthropic_api_key})" : "Enter your Anthropic API key",
-              autocomplete: "off" %>
+              placeholder: @settings.anthropic_configured? ? "API key is saved" : "Enter your Anthropic API key",
+              autocomplete: "new-password" %>
           <div class="form__help">
-            Your API key will be encrypted and stored securely. 
+            Your API key will be encrypted and stored securely.
             <%= link_to "Get your API key from Anthropic", "https://console.anthropic.com/account/keys", target: "_blank", class: "link" %>
           </div>
         </div>
@@ -46,8 +46,8 @@
       <div class="form__section">
         <div class="alert alert--info">
           <div class="alert__content">
-            <strong>Security Note:</strong> API keys are encrypted at rest using Rails' built-in encryption. 
-            Leave fields empty to keep existing values unchanged.
+            <strong>Security Note:</strong> API keys are encrypted at rest using Rails' built-in encryption.
+            Leave a field empty to keep its existing value unchanged.
           </div>
         </div>
       </div>

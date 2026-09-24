@@ -38,28 +38,19 @@
       </div>
 
       <div class="form__group">
-        <%= form.label :api_key, "API Key", class: "form__label form__label--required" %>
-        <% 
-          # Get the appropriate API key based on selected provider
-          default_api_key = nil
-          api_key_configured = false
-          
-          if default_provider == "anthropic" && @settings.anthropic_configured?
-            default_api_key = @settings.anthropic_api_key
-            api_key_configured = true
-          elsif default_provider == "openai" && @settings.openai_configured?
-            default_api_key = @settings.openai_api_key
-            api_key_configured = true
-          end
+        <%= form.label :api_key, "API Key", class: "form__label" %>
+        <%
+          # Whether a key is already stored for the inferred provider. Booleans only —
+          # the key value itself is never sent to the client (CVP-1822).
+          api_key_configured = default_provider.present? && @provider_key_configured[default_provider]
         %>
-        <%= form.password_field :api_key, 
-            class: "form__input", 
-            required: true,
-            value: default_api_key,
+        <%= form.password_field :api_key,
+            class: "form__input",
             placeholder: api_key_configured ? "Using saved API key" : "Enter your API key",
-            data: { 
-              anthropic_key: @settings.anthropic_api_key,
-              openai_key: @settings.openai_api_key
+            autocomplete: "new-password",
+            data: {
+              anthropic_configured: @provider_key_configured["anthropic"],
+              openai_configured: @provider_key_configured["openai"]
             } %>
         <div class="form__help">
           <% if api_key_configured %>
@@ -94,15 +85,18 @@
 </div>
 
 <script>
-  // Swap the API key to match the provider inferred from the selected model.
+  // Update the API key hint to match the provider inferred from the selected model. The key
+  // value itself is never sent to the client (CVP-1822).
   document.addEventListener('DOMContentLoaded', function() {
     const modelSelect = document.getElementById('model');
     const apiKeyField = document.getElementById('api_key');
 
     if (modelSelect && apiKeyField) {
       const helpText = apiKeyField.parentElement.querySelector('.form__help');
-      const anthropicKey = apiKeyField.dataset.anthropicKey;
-      const openaiKey = apiKeyField.dataset.openaiKey;
+      const configuredProviders = {
+        anthropic: apiKeyField.dataset.anthropicConfigured === 'true',
+        openai: apiKeyField.dataset.openaiConfigured === 'true'
+      };
 
       // Mirror PromptEngine.configuration.model_provider_patterns (serialized
       // server-side). Ruby's \A/\z anchors are translated to JS equivalents.
@@ -120,15 +114,12 @@
 
       modelSelect.addEventListener('change', function() {
         const provider = providerForModel(this.value);
-        const savedKey = provider === 'anthropic' ? anthropicKey :
-                         provider === 'openai' ? openaiKey : '';
+        const hasSavedKey = provider ? configuredProviders[provider] : false;
 
-        if (savedKey) {
-          apiKeyField.value = savedKey;
+        if (hasSavedKey) {
           apiKeyField.placeholder = 'Using saved API key';
           helpText.innerHTML = 'Using saved API key from settings. <a href="<%= edit_settings_path %>" class="link">Change in settings</a>';
         } else {
-          apiKeyField.value = '';
           apiKeyField.placeholder = 'Enter your API key';
           helpText.innerHTML = 'Your API key will not be stored. <a href="<%= edit_settings_path %>" class="link">Save in settings</a>';
         }

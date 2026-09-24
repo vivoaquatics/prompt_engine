@@ -7,7 +7,12 @@ module PromptEngine
         @prompt.content + @prompt.system_message.to_s
       ).extract_parameters.map { |p| p[:name] }
 
-      @settings = Setting.instance
+      settings = Setting.instance
+      # Expose only whether a key exists — never the key itself (CVP-1822).
+      @provider_key_configured = {
+        "anthropic" => settings.anthropic_configured?,
+        "openai" => settings.openai_configured?
+      }
     end
 
     def execute

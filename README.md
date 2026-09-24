@@ -71,9 +71,9 @@ Rails.application.routes.draw do
 end
 ```
 
-### Authentication (Recommended for Production)
+### Authentication (Required Before Any Non-Local Deployment)
 
-PromptEngine provides flexible authentication options to secure your admin interface. Since prompt templates may contain sensitive business logic, we strongly recommend configuring authentication for production environments.
+**PromptEngine ships with no authentication of its own.** Its Settings page (API key configuration) and Playground are mounted wide open by default -- anyone who can reach the mounted route can view configuration state, submit provider API keys, and execute prompts against your configured providers. Since prompt templates may also contain sensitive business logic, you MUST configure one of the authentication options below before mounting this engine anywhere reachable beyond your own local development machine (staging, UAT, production, or any shared/internal host). Treat this as a required setup step, not an optional hardening measure.
 
 #### Option 1: Route-level Authentication (Devise)
 
