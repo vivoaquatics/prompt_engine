@@ -21,6 +21,10 @@ module PromptEngine
     end
 
     def settings_params
+      # The "never overwrite a stored key with an empty-string value"
+      # invariant lives on the Setting model (see
+      # PromptEngine::Setting#retain_existing_api_keys_when_blank) so every
+      # writer gets the same protection - not just this controller.
       params.require(:setting).permit(:openai_api_key, :anthropic_api_key)
     end
   end

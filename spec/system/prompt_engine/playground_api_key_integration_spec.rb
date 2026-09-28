@@ -1,4 +1,4 @@
-require 'rails_helper'
+require "rails_helper"
 
 module PromptEngine
   RSpec.describe "Playground API Key Integration", type: :system do
@@ -10,7 +10,7 @@ module PromptEngine
       driven_by(:rack_test)
     end
 
-    describe "API key prefilling from settings" do
+    describe "API key handling (CVP-1822)" do
       context "when settings have API keys saved" do
         before do
           Setting.instance.update!(
@@ -19,26 +19,60 @@ module PromptEngine
           )
         end
 
-        it "prefills the API key based on selected provider" do
-          # Create prompts with different models to test prefilling
+        it "never renders stored API keys into the page" do
           anthropic_prompt = create(:prompt, name: "Anthropic Prompt", content: "Hello {{name}}", model: "claude-3-5-sonnet")
           openai_prompt = create(:prompt, name: "OpenAI Prompt", content: "Hello {{name}}", model: "gpt-4o")
 
-          # Test Anthropic prompt
           visit playground_prompt_path(anthropic_prompt)
-          expect(page).to have_field("api_key", with: "sk-ant-test-anthropic-key")
+          expect(page).to have_field("api_key")
+          expect(find("#api_key")[:value]).to be_nil
+          expect(page.body).not_to include("sk-ant-test-anthropic-key")
+          expect(page.body).not_to include("sk-test-openai-key")
           expect(page).to have_text("Using saved API key from settings")
 
-          # Test OpenAI prompt
           visit playground_prompt_path(openai_prompt)
-          expect(page).to have_field("api_key", with: "sk-test-openai-key")
+          expect(page).to have_field("api_key")
+          expect(find("#api_key")[:value]).to be_nil
+          expect(page.body).not_to include("sk-ant-test-anthropic-key")
+          expect(page.body).not_to include("sk-test-openai-key")
           expect(page).to have_text("Using saved API key from settings")
 
-          # Test prompt with no model - should not prefill
+          # A prompt whose model maps to no known provider still must not leak
+          # either key anywhere on the page (data attrs, script, or field value).
           visit playground_prompt_path(prompt)
+          expect(page.body).not_to include("sk-ant-test-anthropic-key")
+          expect(page.body).not_to include("sk-test-openai-key")
           api_key_field = find("#api_key")
-          expect(api_key_field["data-anthropic-key"]).to eq("sk-ant-test-anthropic-key")
-          expect(api_key_field["data-openai-key"]).to eq("sk-test-openai-key")
+          expect(api_key_field["data-anthropic-key"]).to be_nil
+          expect(api_key_field["data-openai-key"]).to be_nil
+        end
+
+        it "renders only the boolean configured data attributes, never a key attribute" do
+          openai_prompt = create(:prompt, name: "OpenAI Prompt", content: "Hello {{name}}", model: "gpt-4o")
+
+          visit playground_prompt_path(openai_prompt)
+
+          api_key_field = find("#api_key")
+          expect(api_key_field["data-openai-configured"]).to eq("true")
+          expect(api_key_field["data-anthropic-configured"]).to eq("true")
+          expect(api_key_field["data-anthropic-key"]).to be_nil
+          expect(api_key_field["data-openai-key"]).to be_nil
+        end
+
+        it "renders the api_key field as not required" do
+          openai_prompt = create(:prompt, name: "OpenAI Prompt", content: "Hello {{name}}", model: "gpt-4o")
+
+          visit playground_prompt_path(openai_prompt)
+
+          expect(find("#api_key")[:required]).to be_falsey
+        end
+
+        it "opts the api_key field out of browser credential autofill" do
+          openai_prompt = create(:prompt, name: "OpenAI Prompt", content: "Hello {{name}}", model: "gpt-4o")
+
+          visit playground_prompt_path(openai_prompt)
+
+          expect(find("#api_key")["autocomplete"]).to eq("new-password")
         end
 
         it "includes link to change settings" do
@@ -60,7 +94,16 @@ module PromptEngine
           visit playground_prompt_path(prompt)
 
           expect(page).to have_field("api_key", placeholder: "Enter your API key")
+          expect(find("#api_key")[:value]).to be_nil
           expect(page).to have_link("Save in settings", href: edit_settings_path)
+        end
+
+        it "marks both providers as not configured" do
+          visit playground_prompt_path(prompt)
+
+          api_key_field = find("#api_key")
+          expect(api_key_field["data-openai-configured"]).to eq("false")
+          expect(api_key_field["data-anthropic-configured"]).to eq("false")
         end
       end
 
@@ -72,19 +115,20 @@ module PromptEngine
           )
         end
 
-        it "only prefills for the provider with saved key" do
-          # Create a prompt with a model that matches the provider with a saved key
+        it "shows the saved-key hint without ever rendering the key itself" do
           openai_prompt = create(:prompt, name: "OpenAI Prompt", content: "Hello {{name}}", model: "gpt-4o")
 
           visit playground_prompt_path(openai_prompt)
 
-          # OpenAI should be selected because of the model, and key should be prefilled
-          expect(page).to have_field("api_key", with: "sk-test-openai-only")
+          expect(page).to have_field("api_key")
+          expect(find("#api_key")[:value]).to be_nil
+          expect(page).to have_text("Using saved API key from settings")
+          expect(page.body).not_to include("sk-test-openai-only")
 
-          # Data attributes should still be set correctly
           api_key_field = find("#api_key")
-          expect(api_key_field["data-openai-key"]).to eq("sk-test-openai-only")
-          # When the API key is nil, the data attribute is not set (nil)
+          expect(api_key_field["data-openai-configured"]).to eq("true")
+          expect(api_key_field["data-anthropic-configured"]).to eq("false")
+          expect(api_key_field["data-openai-key"]).to be_nil
           expect(api_key_field["data-anthropic-key"]).to be_nil
         end
       end

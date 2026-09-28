@@ -56,63 +56,64 @@ RSpec.describe "Settings API Key Integration", type: :integration do
     end
   end
 
-  describe "Playground executor API key integration" do
-    let(:playground_executor) do
+  describe "Playground executor API key integration (CVP-1822)" do
+    # Real PlaygroundExecutor constructor: prompt:, api_key: (optional), parameters:, model:.
+    # No credentials fallback exists here (removed entirely) -- resolution is
+    # explicit api_key override, then PromptEngine::Setting.first, and nothing else.
+    def build_executor(model:)
       PromptEngine::PlaygroundExecutor.new(
-        prompt_version: prompt_version,
-        input_variables: { topic: "test" }
+        prompt: prompt,
+        parameters: { topic: "test" },
+        model: model
       )
     end
 
     context "with OpenAI model" do
-      before do
-        prompt_version.update!(model: "gpt-4")
-      end
-
-      xit "uses Settings API key when available" do
+      it "resolves the API key from Settings, applies it to a per-call RubyLLM context, and ignores Rails credentials" do
         PromptEngine::Setting.instance.update!(openai_api_key: "sk-settings-openai")
         allow(Rails.application.credentials).to receive(:dig).with(:openai, :api_key).and_return("sk-rails-openai")
 
-        # Mock the OpenAI client
-        mock_client = instance_double("OpenAI::Client")
-        allow(OpenAI::Client).to receive(:new).and_return(mock_client)
-        allow(mock_client).to receive(:chat).and_return({
-          "choices" => [ { "message" => { "content" => "Response" } } ]
-        })
+        chat_double = instance_double(RubyLLM::Chat)
+        ruby_llm = stub_ruby_llm_context!(chat_double: chat_double)
+        allow(chat_double).to receive(:with_temperature).and_return(chat_double)
+        allow(chat_double).to receive(:with_instructions).and_return(chat_double)
+        allow(chat_double).to receive(:ask).and_return(double("Response", content: "Response"))
 
-        # Verify it uses the Settings key
-        expect(OpenAI::Client).to receive(:new).with(
-          access_token: "sk-settings-openai",
-          log_errors: true
-        )
+        executor = build_executor(model: "gpt-4")
+        allow(executor).to receive(:require).with("ruby_llm")
 
-        playground_executor.execute
+        executor.execute
+
+        expect(ruby_llm[:config]).to have_received(:openai_api_key=).with("sk-settings-openai")
+        expect(Rails.application.credentials).not_to have_received(:dig).with(:openai, :api_key)
       end
     end
 
     context "with Anthropic model" do
-      before do
-        prompt_version.update!(model: "claude-3-sonnet")
-      end
-
-      xit "uses Settings API key when available" do
+      it "resolves the API key from Settings, applies it to a per-call RubyLLM context, and ignores Rails credentials" do
         PromptEngine::Setting.instance.update!(anthropic_api_key: "sk-ant-settings-key")
         allow(Rails.application.credentials).to receive(:dig).with(:anthropic, :api_key).and_return("sk-ant-rails-key")
 
-        # Mock the Anthropic client
-        mock_client = instance_double("Anthropic::Client")
-        allow(Anthropic::Client).to receive(:new).and_return(mock_client)
-        allow(mock_client).to receive(:messages).and_return({
-          "content" => [ { "text" => "Response" } ]
-        })
+        chat_double = instance_double(RubyLLM::Chat)
+        ruby_llm = stub_ruby_llm_context!(chat_double: chat_double)
+        allow(chat_double).to receive(:with_temperature).and_return(chat_double)
+        allow(chat_double).to receive(:with_instructions).and_return(chat_double)
+        allow(chat_double).to receive(:ask).and_return(double("Response", content: "Response"))
 
-        # Verify it uses the Settings key
-        expect(Anthropic::Client).to receive(:new).with(
-          access_token: "sk-ant-settings-key"
-        )
+        executor = build_executor(model: "claude-3-sonnet")
+        allow(executor).to receive(:require).with("ruby_llm")
 
-        playground_executor.execute
+        executor.execute
+
+        expect(ruby_llm[:config]).to have_received(:anthropic_api_key=).with("sk-ant-settings-key")
+        expect(Rails.application.credentials).not_to have_received(:dig).with(:anthropic, :api_key)
       end
+    end
+
+    it "does not raise when constructed without api_key: and leaves #api_key nil" do
+      executor = PromptEngine::PlaygroundExecutor.new(prompt: prompt, parameters: { topic: "test" }, model: "gpt-4")
+
+      expect(executor.api_key).to be_nil
     end
   end
 

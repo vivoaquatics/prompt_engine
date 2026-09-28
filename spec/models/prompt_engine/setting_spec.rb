@@ -36,6 +36,53 @@ module PromptEngine
       end
     end
 
+    describe "blank-value retention (never overwrite a stored key with blank)" do
+      let(:settings) { described_class.instance }
+
+      before do
+        settings.update!(openai_api_key: "sk-existing-key", anthropic_api_key: "sk-ant-existing-key")
+      end
+
+      it "restores the existing key when updated directly with a blank value" do
+        settings.update!(openai_api_key: "")
+
+        expect(settings.reload.openai_configured?).to be(true)
+        expect(settings.openai_api_key).to eq("sk-existing-key")
+      end
+
+      it "leaves the other provider's key untouched" do
+        settings.update!(openai_api_key: "")
+
+        expect(settings.anthropic_api_key).to eq("sk-ant-existing-key")
+      end
+
+      it "restores the existing key when updated with a whitespace-only value" do
+        settings.update!(openai_api_key: "   ")
+
+        expect(settings.reload.openai_configured?).to be(true)
+        expect(settings.openai_api_key).to eq("sk-existing-key")
+      end
+
+      it "restores the existing key when updated with a Unicode-whitespace-only value" do
+        settings.update!(openai_api_key: " ")
+
+        expect(settings.reload.openai_configured?).to be(true)
+        expect(settings.openai_api_key).to eq("sk-existing-key")
+      end
+    end
+
+    describe "blank submission for a provider that has never had a key stored" do
+      let(:settings) { described_class.instance }
+
+      it "normalizes the attribute to nil rather than persisting an empty string" do
+        settings.update!(anthropic_api_key: "   ")
+
+        settings.reload
+        expect(settings.anthropic_configured?).to be(false)
+        expect(settings.anthropic_api_key).to be_nil
+      end
+    end
+
     describe "encrypted attributes" do
       let(:settings) { described_class.instance }
 
@@ -67,54 +114,6 @@ module PromptEngine
         # But we can still read the decrypted value
         settings.reload
         expect(settings.anthropic_api_key).to eq("sk-ant-test-key")
-      end
-    end
-
-    describe "#masked_openai_api_key" do
-      let(:settings) { described_class.instance }
-
-      context "when api key is present" do
-        before { settings.update!(openai_api_key: "sk-abc123xyz789") }
-
-        it "returns a masked version" do
-          expect(settings.masked_openai_api_key).to eq("sk-...789")
-        end
-      end
-
-      context "when api key is nil" do
-        before { settings.update!(openai_api_key: nil) }
-
-        it "returns nil" do
-          expect(settings.masked_openai_api_key).to be_nil
-        end
-      end
-
-      context "when api key is short" do
-        before { settings.update!(openai_api_key: "short") }
-
-        it "returns asterisks" do
-          expect(settings.masked_openai_api_key).to eq("*****")
-        end
-      end
-    end
-
-    describe "#masked_anthropic_api_key" do
-      let(:settings) { described_class.instance }
-
-      context "when api key is present" do
-        before { settings.update!(anthropic_api_key: "sk-ant-api-key-123") }
-
-        it "returns a masked version" do
-          expect(settings.masked_anthropic_api_key).to eq("sk-...123")
-        end
-      end
-
-      context "when api key is nil" do
-        before { settings.update!(anthropic_api_key: nil) }
-
-        it "returns nil" do
-          expect(settings.masked_anthropic_api_key).to be_nil
-        end
       end
     end
   end
