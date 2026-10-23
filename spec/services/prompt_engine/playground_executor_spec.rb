@@ -152,6 +152,56 @@ RSpec.describe PromptEngine::PlaygroundExecutor, type: :service do
         end
       end
 
+      # ruby_llm 2.x: Message has no #input_tokens/#output_tokens, only
+      # #tokens (a RubyLLM::Tokens). Before this was handled the count
+      # silently fell through to 0 for every model (CVP-2133).
+      context "with token counts only on response.tokens (ruby_llm 2.x shape)" do
+        let(:mock_response) do
+          double("response",
+            content: "Response content",
+            tokens: double("tokens", input: 50, output: 100)
+          )
+        end
+
+        it "calculates total token count from the tokens object" do
+          result = executor.execute
+
+          expect(result[:token_count]).to eq(150)
+        end
+      end
+
+      context "with a tokens object missing one count" do
+        let(:mock_response) do
+          double("response",
+            content: "Response content",
+            tokens: double("tokens", input: 50, output: nil)
+          )
+        end
+
+        it "treats the missing count as zero" do
+          result = executor.execute
+
+          expect(result[:token_count]).to eq(50)
+        end
+      end
+
+      context "with a nil tokens object and flat readers" do
+        let(:mock_response) do
+          double("response",
+            content: "Response content",
+            tokens: nil,
+            input_tokens: 50,
+            output_tokens: 100
+          )
+        end
+
+        it "falls back to the flat readers" do
+          result = executor.execute
+
+          expect(result[:token_count]).to eq(150)
+        end
+      end
+
       context "with string response" do
         let(:mock_response) { "Simple string response" }
 

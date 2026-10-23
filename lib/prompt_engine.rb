@@ -147,6 +147,25 @@ module PromptEngine
         # only — no vivopoint model ids ship here (see options_for_model_select,
         # which intentionally stays empty of them too).
         @model_reasoning_options = {
+          # Value lists follow ruby_llm 2.1.1's registry (models.json, openai
+          # provider). gpt-6-astra has no "none" there, unlike luna/sol, so it
+          # gets its own entry; the gpt-6 pattern names luna/sol explicitly so
+          # the lookup stays order-independent.
+          "gpt-6.1" => {
+            pattern: /^gpt-6\.1(-|$)/i,
+            mode: "effort",
+            values: %w[low medium high xhigh max]
+          },
+          "gpt-6-astra" => {
+            pattern: /^gpt-6-astra(-|$)/i,
+            mode: "effort",
+            values: %w[low medium high xhigh max]
+          },
+          "gpt-6" => {
+            pattern: /^gpt-6-(luna|sol)(-|$)/i,
+            mode: "effort",
+            values: %w[none low medium high xhigh max]
+          },
           "gpt-5.6" => {
             pattern: /^gpt-5\.6(-|$)/i,
             mode: "effort",
@@ -177,17 +196,19 @@ module PromptEngine
             mode: "budget",
             values: %w[low medium high],
             budgets: { "low" => 2048, "medium" => 8192, "high" => 16384 }
+          },
+          # Covers claude-opus-5, claude-sonnet-5, claude-opus-5-5 and
+          # claude-sonnet-5-5. Needs ruby_llm 2.1.1+, whose registry carries
+          # their `reasoning_options`. On an older registry these ids take the
+          # assume_model_exists path (Model::Info.default, no reasoning_options),
+          # and the Anthropic provider raises ArgumentError if reasoning is sent
+          # (CVP-1797). claude-haiku-5-5 is deliberately not matched: ruby_llm
+          # 2.1.1 has no registry entry for it, so it would hit that same path.
+          "claude-5" => {
+            pattern: /^claude-(opus|sonnet)-5(-|$)/i,
+            mode: "effort",
+            values: %w[low medium high xhigh max]
           }
-          # "claude-5" => {
-          #   pattern: /^claude-(opus|sonnet)-5(-|$)/i,
-          #   mode: "effort",
-          #   values: %w[low medium high xhigh max]
-          # }
-          # Uncomment once claude-opus-5 / claude-sonnet-5 gain `reasoning_options`
-          # in ruby_llm's registry (models.json). Until then, both raise
-          # ArgumentError from the Anthropic provider if reasoning is sent
-          # (assume_model_exists: true yields Model::Info.default, which has no
-          # reasoning_options) — see CVP-1797's plan for details.
         }
       end
     end
