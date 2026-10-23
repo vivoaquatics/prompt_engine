@@ -1,17 +1,24 @@
 require "rails_helper"
 
 RSpec.describe PromptEngine::Reasoning do
-  # vivopoint's config/config.yml prompt_engine.options_for_model_select (19 ids).
+  # vivopoint's config/config.yml prompt_engine.options_for_model_select (24 ids).
   # This is the table that catches the `/^gpt-5/`-matches-`gpt-5.6`/`gpt-5.4`
   # anchoring trap: a naive pattern would silently hand GPT-5.6/GPT-5.4 the
   # GPT-5 value list instead of leaving them correctly matched by their own,
-  # more specific family entries.
+  # more specific family entries. The same applies to gpt-6 vs gpt-6.1 and
+  # gpt-6-astra.
   EXPECTED_FAMILY_FOR_MODEL = {
-    "claude-opus-5" => nil,
-    "claude-sonnet-5" => nil,
+    "claude-opus-5-5" => "claude-5",
+    "claude-sonnet-5-5" => "claude-5",
+    "claude-haiku-5-5" => nil,
+    "claude-opus-5" => "claude-5",
+    "claude-sonnet-5" => "claude-5",
     "claude-opus-4-8" => "claude-opus-4-8",
     "claude-sonnet-4-6" => "claude-sonnet-4-6",
     "claude-haiku-4-5" => "claude-haiku-4-5",
+    "gpt-6-astra" => "gpt-6-astra",
+    "gpt-6.1-sol" => "gpt-6.1",
+    "gpt-6-luna" => "gpt-6",
     "gpt-5.6-sol" => "gpt-5.6",
     "gpt-5.6-terra" => "gpt-5.6",
     "gpt-5.6-luna" => "gpt-5.6",
@@ -23,7 +30,6 @@ RSpec.describe PromptEngine::Reasoning do
     "gpt-5-nano" => "gpt-5",
     "gpt-4.1" => nil,
     "gpt-4.1-mini" => nil,
-    "gpt-4.1-nano" => nil,
     "gpt-4o" => nil,
     "gpt-4o-mini" => nil
   }.freeze
@@ -57,8 +63,27 @@ RSpec.describe PromptEngine::Reasoning do
       expect(described_class.values_for("gpt-4o")).to eq([])
     end
 
-    it "returns an empty array for a hidden Claude 5 id" do
-      expect(described_class.values_for("claude-opus-5")).to eq([])
+    it "returns the effort list for Claude 5 / 5.5 Opus and Sonnet" do
+      %w[claude-opus-5 claude-sonnet-5 claude-opus-5-5 claude-sonnet-5-5].each do |model|
+        expect(described_class.values_for(model)).to eq(%w[low medium high xhigh max])
+      end
+    end
+
+    it "returns an empty array for claude-haiku-5-5 (not in ruby_llm's registry)" do
+      expect(described_class.values_for("claude-haiku-5-5")).to eq([])
+    end
+
+    it "returns the exact value lists for the GPT-6 family", :aggregate_failures do
+      expect(described_class.values_for("gpt-6-luna")).to eq(%w[none low medium high xhigh max])
+      expect(described_class.values_for("gpt-6-sol")).to eq(%w[none low medium high xhigh max])
+      expect(described_class.values_for("gpt-6-astra")).to eq(%w[low medium high xhigh max])
+      expect(described_class.values_for("gpt-6.1-sol")).to eq(%w[low medium high xhigh max])
+    end
+
+    it "does not match look-alike ids with the GPT-6 or Claude 5 patterns", :aggregate_failures do
+      expect(described_class.values_for("gpt-60")).to eq([])
+      expect(described_class.values_for("gpt-6-terra")).to eq([])
+      expect(described_class.values_for("claude-opus-50")).to eq([])
     end
 
     it "returns an empty array for nil" do

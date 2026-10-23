@@ -77,12 +77,7 @@ module PromptEngine
         response.to_s
       end
 
-      # Try to get token count if available
-      token_count = if response.respond_to?(:input_tokens) && response.respond_to?(:output_tokens)
-        (response.input_tokens || 0) + (response.output_tokens || 0)
-      else
-        0 # Default if token information isn't available
-      end
+      token_count = response_token_count(response)
 
       {
         response: response_content,
@@ -97,6 +92,24 @@ module PromptEngine
     end
 
     private
+
+    # Input plus output tokens, or 0 when the response reports none.
+    # ruby_llm 2.x removed Message#input_tokens/#output_tokens; both 1.x and
+    # 2.x expose the counts on Message#tokens (a RubyLLM::Tokens), so that is
+    # read first. The flat readers stay as a fallback for older versions and
+    # for hand-built response objects.
+    def response_token_count(response)
+      tokens = response.tokens if response.respond_to?(:tokens)
+      if tokens.respond_to?(:input) && tokens.respond_to?(:output)
+        return (tokens.input || 0) + (tokens.output || 0)
+      end
+
+      if response.respond_to?(:input_tokens) && response.respond_to?(:output_tokens)
+        return (response.input_tokens || 0) + (response.output_tokens || 0)
+      end
+
+      0
+    end
 
     # The reasoning effort actually sent with this run: the prompt's saved
     # value if valid for the selected model, otherwise the request-time

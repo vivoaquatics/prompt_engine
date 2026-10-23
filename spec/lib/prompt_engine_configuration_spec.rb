@@ -1,9 +1,8 @@
 require "rails_helper"
 
 RSpec.describe PromptEngine do
-  # NOTE: this block has a known, pre-existing global-state leak — it mutates
-  # options_for_model_select and never restores it. Accepted as a follow-up rather than
-  # fixed here (tracked as CVP-1821). Left as-is intentionally; do not "helpfully" fix it.
+  # This block mutates the process-wide configuration without restoring it;
+  # spec/support/configuration_reset.rb resets it after every example (CVP-1821).
   describe "configure" do
     it "yields the configuration object" do
       PromptEngine.configure do |config|
@@ -84,14 +83,17 @@ RSpec.describe PromptEngine do
     # known leak.
     let(:default_families) { PromptEngine.configuration.class.new.model_reasoning_options }
 
-    it "ships exactly the 6 documented families" do
+    it "ships exactly the 10 documented families" do
       expect(default_families.keys).to eq(
-        %w[gpt-5.6 gpt-5.4 gpt-5 claude-opus-4-8 claude-sonnet-4-6 claude-haiku-4-5]
+        %w[
+          gpt-6.1 gpt-6-astra gpt-6 gpt-5.6 gpt-5.4 gpt-5
+          claude-opus-4-8 claude-sonnet-4-6 claude-haiku-4-5 claude-5
+        ]
       )
     end
 
-    it "does not include a claude-5 entry (deliberately hidden until ruby_llm's registry supports it)" do
-      expect(default_families).not_to have_key("claude-5")
+    it "includes a claude-5 entry now that ruby_llm 2.1.1's registry supports it" do
+      expect(default_families["claude-5"][:values]).to eq(%w[low medium high xhigh max])
     end
 
     it "gives every entry a pattern, mode, and values", :aggregate_failures do
@@ -108,7 +110,7 @@ RSpec.describe PromptEngine do
 
       expect(budget_families.keys).to eq(%w[claude-haiku-4-5])
       expect(default_families["claude-haiku-4-5"][:budgets].keys.sort).to eq(%w[high low medium])
-      %w[gpt-5.6 gpt-5.4 gpt-5 claude-opus-4-8 claude-sonnet-4-6].each do |name|
+      %w[gpt-6.1 gpt-6-astra gpt-6 gpt-5.6 gpt-5.4 gpt-5 claude-opus-4-8 claude-sonnet-4-6 claude-5].each do |name|
         expect(default_families[name]).not_to have_key(:budgets)
       end
     end
